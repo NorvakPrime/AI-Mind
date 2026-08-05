@@ -1,17 +1,91 @@
-# ai_mind
+# 🧠 AI Mind
 
-A new Flutter project.
+**AI Mind** — это современный, приватный и функциональный клиент для общения с ИИ-моделями через платформу [OpenRouter](https://openrouter.ai/). Приложение ориентировано на удобство, гибкость настроек и глубокое погружение в ролевые сценарии.
 
-## Getting Started
+---
 
-This project is a starting point for a Flutter application.
+## ✨ Основные возможности
 
-A few resources to get you started if this is your first Flutter project:
+- 🚀 **Интеграция с OpenRouter:** Доступ к топовым моделям (DeepSeek, GPT-4o, Claude 3.5 Sonnet и др.) через один API-ключ.
+- 🛡️ **Режимы контента:** Быстрое переключение между **SFW** (безопасным) и **NSFW** (18+) режимами с автоматической подстройкой системных инструкций.
+- 📝 **Markdown & RP-эффекты:** 
+    - Полная поддержка Markdown (списки, код, цитаты).
+    - **Улучшенное выделение действий:** В ролевых играх текст в `*звездочках*` подсвечивается разными цветами для ИИ и пользователя, что делает диалог наглядным.
+- 🌍 **Мультиязычность:** Выбор из более чем 100 языков или режим **Авто** для автоматического определения языка собеседника.
+- 💾 **Локальная история:** Все ваши чаты хранятся только на вашем устройстве в зашифрованном виде.
+- ⚡ **Потоковые ответы:** Наблюдайте за тем, как ИИ генерирует ответ в реальном времени.
+- 🎨 **Material 3 UI:** Чистый и минималистичный темный интерфейс, адаптированный под мобильные устройства и десктоп.
 
-- [Learn Flutter](https://docs.flutter.dev/get-started/learn-flutter)
-- [Write your first Flutter app](https://docs.flutter.dev/get-started/codelab)
-- [Flutter learning resources](https://docs.flutter.dev/reference/learning-resources)
+---
 
-For help getting started with Flutter development, view the
-[online documentation](https://docs.flutter.dev/), which offers tutorials,
-samples, guidance on mobile development, and a full API reference.
+## 📸 Скриншоты
+
+> **Совет:** Чтобы проект выглядел круто, сделай скриншоты на симуляторе или реальном телефоне и положи их в папку `screenshots/`.
+
+| Главный экран | Настройка чата | Настройки |
+| :---: | :---: | :---: |
+| ![Chat Screen](https://via.placeholder.com/300x600?text=Chat+Interface) | ![New Chat](https://via.placeholder.com/300x600?text=Language+%26+Mode) | ![Settings](https://via.placeholder.com/300x600?text=Models+%26+Balance) |
+| *Скриншот 1: Пример диалога с Markdown и RP-подсветкой* | *Скриншот 2: Окно создания чата (Выбор языка и 18+ режима)* | *Скриншот 3: Управление моделями, балансом и параметрами* |
+
+---
+
+## 🛠 Технологический стек
+
+- **Framework:** [Flutter](https://flutter.dev/) (Dart)
+- **State Management:** StatefulWidget / setState (оптимизировано для легкого веса)
+- **API:** [OpenRouter API](https://openrouter.ai/docs)
+- **Storage:** `shared_preferences`
+- **Markdown:** `flutter_markdown`
+- **Language Data:** `language_picker`
+
+---
+
+## 🚀 Быстрый старт
+
+### Требования
+- Установленный Flutter SDK ([инструкция](https://docs.flutter.dev/get-started/install))
+- API ключ от [OpenRouter](https://openrouter.ai/keys)
+
+### Установка
+1. Клонируйте репозиторий:
+   ```bash
+   git clone https://github.com/your-username/ai_mind.git
+   cd ai_mind
+   ```
+
+2. Установите зависимости:
+   ```bash
+   flutter pub get
+   ```
+
+3. Запустите приложение:
+   ```bash
+   flutter run
+   ```
+
+---
+
+## ⚙️ Настройка
+
+1. Откройте приложение и перейдите в **Настройки** (иконка шестеренки).
+2. Вставьте ваш **API Token** от OpenRouter.
+3. Нажмите кнопку **Обновить** рядом с выбором модели, чтобы загрузить актуальный список доступных ИИ и их стоимость.
+4. Настройте параметры генерации (температура, лимит токенов) под свои нужды.
+
+---
+
+## 🤝 Конфиденциальность
+
+Мы ценим вашу приватность. 
+- API-ключ хранится локально в безопасном хранилище.
+- История переписки **не отправляется** на наши серверы (только напрямую в OpenRouter для обработки запроса).
+- Приложение не собирает аналитику.
+
+---
+
+## 📄 Лицензия
+
+Этот проект распространяется под лицензией **MIT**. Подробности в файле [LICENSE](LICENSE).
+
+---
+*Developed with ❤️ by [Norvak]*
