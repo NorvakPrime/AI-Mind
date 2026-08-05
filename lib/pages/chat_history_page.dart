@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../models/chat_session.dart';
 import '../theme/app_colors.dart';
+import '../utils/animations.dart';
 
 class ChatHistoryPage extends StatefulWidget {
   const ChatHistoryPage({
@@ -187,7 +188,7 @@ class _ChatHistoryPageState extends State<ChatHistoryPage> {
   }
 
   void _showDeleteConfirmation(BuildContext context, ChatSession session) {
-    showDialog(
+    showAnimatedDialog(
       context: context,
       builder: (context) => AlertDialog(
         backgroundColor: AppColors.surfaceLight,

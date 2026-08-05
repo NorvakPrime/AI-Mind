@@ -3,6 +3,7 @@ import 'package:flutter_markdown/flutter_markdown.dart';
 
 import '../models/message.dart';
 import '../theme/app_colors.dart';
+import '../utils/animations.dart';
 
 // ───────────────────────── Область чата ─────────────────────────
 
@@ -262,7 +263,7 @@ class MessageBubble extends StatelessWidget {
 
   void _showEditDialog(BuildContext context) {
     final controller = TextEditingController(text: message.text);
-    showDialog(
+    showAnimatedDialog(
       context: context,
       builder: (context) => AlertDialog(
         backgroundColor: AppColors.surfaceLight,

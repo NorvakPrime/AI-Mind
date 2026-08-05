@@ -12,6 +12,7 @@ import '../pages/settings_page.dart';
 import '../services/open_router_service.dart';
 import '../services/settings_service.dart';
 import '../theme/app_colors.dart';
+import '../utils/animations.dart';
 import '../widgets/chat_area.dart';
 import '../widgets/settings_panel.dart';
 
@@ -191,7 +192,7 @@ class _ChatPageState extends State<ChatPage> {
     bool isNsfw = _settings.nsfwDefault;
     String selectedLang = _settings.languageDefault;
 
-    showDialog(
+    showAnimatedDialog(
       context: context,
       builder: (context) => StatefulBuilder(
         builder: (context, setDialogState) => AlertDialog(
@@ -575,8 +576,8 @@ class _ChatPageState extends State<ChatPage> {
     } else {
       Navigator.push(
         context,
-        MaterialPageRoute(
-          builder: (_) => SettingsPage(
+        SmoothPageRoute(
+          child: SettingsPage(
             settings: _settings,
             modelId: _modelId,
             models: _models,
@@ -597,8 +598,8 @@ class _ChatPageState extends State<ChatPage> {
   void _openHistory() {
     Navigator.push(
       context,
-      MaterialPageRoute(
-        builder: (_) => ChatHistoryPage(
+      SmoothPageRoute(
+        child: ChatHistoryPage(
           sessions: _sessions,
           activeSessionId: _activeSessionId,
           onSelect: (id) {
@@ -722,7 +723,14 @@ class _ChatPageState extends State<ChatPage> {
                                 width: 1,
                                 color: AppColors.surfaceBorder,
                               ),
-                              SizedBox(width: 360, child: _buildSidePanel()),
+                              SizedBox(
+                                width: 360,
+                                child: AnimatedOpacity(
+                                  duration: const Duration(milliseconds: 200),
+                                  opacity: _showSettings ? 1.0 : 0.0,
+                                  child: _buildSidePanel(),
+                                ),
+                              ),
                             ],
                           )
                         : const SizedBox.shrink(),
@@ -815,10 +823,20 @@ class _ChatPageState extends State<ChatPage> {
         // Настройки
         IconButton(
           onPressed: _openSettings,
-          icon: Icon(
-            _showSettings ? Icons.close_rounded : Icons.tune_rounded,
-            size: 21,
-            color: AppColors.textSecondary,
+          icon: AnimatedSwitcher(
+            duration: const Duration(milliseconds: 200),
+            transitionBuilder: (child, anim) => RotationTransition(
+              turns: child.key == const ValueKey('close')
+                  ? anim
+                  : Tween<double>(begin: 1, end: 0).animate(anim),
+              child: FadeTransition(opacity: anim, child: child),
+            ),
+            child: Icon(
+              _showSettings ? Icons.close_rounded : Icons.tune_rounded,
+              key: ValueKey(_showSettings ? 'close' : 'settings'),
+              size: 21,
+              color: AppColors.textSecondary,
+            ),
           ),
           style: IconButton.styleFrom(
             backgroundColor: _showSettings
