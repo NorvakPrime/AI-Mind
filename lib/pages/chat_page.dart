@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:language_picker/languages.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import '../l10n/translations.dart';
 import '../models/ai_model.dart';
 import '../models/chat_session.dart';
 import '../models/message.dart';
@@ -97,11 +98,11 @@ class _ChatPageState extends State<ChatPage> {
     if (sessions.isEmpty) {
       final session = ChatSession(
         id: DateTime.now().millisecondsSinceEpoch.toString(),
-        title: 'Новый чат',
+        title: Translations.of(context).newChat,
         createdAt: DateTime.now(),
         messages: [
-          const Message(
-            'Привет! Я AI Mind. Задайте вопрос — постараюсь помочь.',
+          Message(
+            Translations.of(context).get('first_msg_default'),
             fromUser: false,
           ),
         ],
@@ -161,6 +162,7 @@ class _ChatPageState extends State<ChatPage> {
     bool isNsfw = false,
     String language = 'Auto',
   }) {
+    final l10n = Translations.of(context);
     String finalSystem = systemPrompt ?? '';
     finalSystem += isNsfw ? '\n\n$_kNsfwPrompt' : '\n\n$_kSfwPrompt';
 
@@ -168,13 +170,13 @@ class _ChatPageState extends State<ChatPage> {
 
     final session = ChatSession(
       id: DateTime.now().millisecondsSinceEpoch.toString(),
-      title: 'Новый чат',
+      title: l10n.newChat,
       createdAt: DateTime.now(),
       systemPrompt: finalSystem.trim().isEmpty ? null : finalSystem,
       messages: [
         Message(
           (firstMessage == null || firstMessage.trim().isEmpty)
-              ? 'Привет! Я AI Mind. Задайте вопрос — постараюсь помочь.'
+              ? l10n.get('first_msg_default')
               : firstMessage,
           fromUser: false,
         ),
@@ -187,6 +189,7 @@ class _ChatPageState extends State<ChatPage> {
   }
 
   void _showNewChatDialog() {
+    final l10n = Translations.of(context);
     final systemCtrl = TextEditingController();
     final firstCtrl = TextEditingController();
     bool isNsfw = _settings.nsfwDefault;
@@ -201,13 +204,13 @@ class _ChatPageState extends State<ChatPage> {
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(20),
           ),
-          title: const Row(
+          title: Row(
             children: [
-              Icon(Icons.auto_awesome, color: AppColors.accent, size: 20),
-              SizedBox(width: 10),
+              const Icon(Icons.auto_awesome, color: AppColors.accent, size: 20),
+              const SizedBox(width: 10),
               Text(
-                'Новый чат',
-                style: TextStyle(color: AppColors.textPrimary, fontSize: 18),
+                l10n.newChat,
+                style: const TextStyle(color: AppColors.textPrimary, fontSize: 18),
               ),
             ],
           ),
@@ -217,9 +220,9 @@ class _ChatPageState extends State<ChatPage> {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 // ── Язык ──
-                const Text(
-                  'Приоритетный язык',
-                  style: TextStyle(
+                Text(
+                  l10n.languagePriority,
+                  style: const TextStyle(
                     color: AppColors.textSecondary,
                     fontSize: 13,
                   ),
@@ -257,7 +260,7 @@ class _ChatPageState extends State<ChatPage> {
                                 (lang) => DropdownMenuItem<String>(
                                   value: lang,
                                   child: Text(
-                                    lang,
+                                    lang == 'Auto' ? l10n.auto : lang,
                                     style: const TextStyle(
                                       color: AppColors.textPrimary,
                                       fontSize: 14,
@@ -277,9 +280,9 @@ class _ChatPageState extends State<ChatPage> {
                 ),
                 const SizedBox(height: 20),
 
-                const Text(
-                  'System Prompt (инструкции)',
-                  style: TextStyle(
+                Text(
+                  l10n.systemPrompt,
+                  style: const TextStyle(
                     color: AppColors.textSecondary,
                     fontSize: 13,
                   ),
@@ -292,14 +295,14 @@ class _ChatPageState extends State<ChatPage> {
                     color: AppColors.textPrimary,
                     fontSize: 14,
                   ),
-                  decoration: const InputDecoration(
-                    hintText: 'Напр: Ты эксперт в Dart...',
+                  decoration: InputDecoration(
+                    hintText: l10n.get('system_prompt_hint'),
                   ),
                 ),
                 const SizedBox(height: 20),
-                const Text(
-                  'Первое сообщение от ИИ',
-                  style: TextStyle(
+                Text(
+                  l10n.firstMessage,
+                  style: const TextStyle(
                     color: AppColors.textSecondary,
                     fontSize: 13,
                   ),
@@ -312,8 +315,8 @@ class _ChatPageState extends State<ChatPage> {
                     color: AppColors.textPrimary,
                     fontSize: 14,
                   ),
-                  decoration: const InputDecoration(
-                    hintText: 'Оставьте пустым для стандарта',
+                  decoration: InputDecoration(
+                    hintText: l10n.get('first_msg_hint'),
                   ),
                 ),
                 const SizedBox(height: 20),
@@ -328,15 +331,15 @@ class _ChatPageState extends State<ChatPage> {
                     ),
                   ),
                   child: SwitchListTile(
-                    title: const Text(
-                      'Режим 18+',
-                      style: TextStyle(
+                    title: Text(
+                      l10n.nsfwMode,
+                      style: const TextStyle(
                         color: AppColors.textPrimary,
                         fontSize: 14,
                       ),
                     ),
                     subtitle: Text(
-                      isNsfw ? 'NSFW включен' : 'Безопасный режим',
+                      isNsfw ? l10n.get('nsfw_on') : l10n.get('safe_mode'),
                       style: const TextStyle(
                         color: AppColors.textMuted,
                         fontSize: 11,
@@ -356,9 +359,9 @@ class _ChatPageState extends State<ChatPage> {
           actions: [
             TextButton(
               onPressed: () => Navigator.pop(context),
-              child: const Text(
-                'Отмена',
-                style: TextStyle(color: AppColors.textMuted),
+              child: Text(
+                l10n.cancel,
+                style: const TextStyle(color: AppColors.textMuted),
               ),
             ),
             ElevatedButton(
@@ -378,7 +381,7 @@ class _ChatPageState extends State<ChatPage> {
                   borderRadius: BorderRadius.circular(10),
                 ),
               ),
-              child: const Text('Создать'),
+              child: Text(l10n.create),
             ),
           ],
         ),
@@ -430,7 +433,7 @@ class _ChatPageState extends State<ChatPage> {
     _saveSessions();
 
     if (_apiToken.trim().isEmpty) {
-      _showSnack('Добавьте API-токен в настройках');
+      _showSnack(Translations.of(context).get('api_token_error') == 'api_token_error' ? 'Добавьте API-токен в настройках' : Translations.of(context).get('api_token_error'));
       return;
     }
 
@@ -469,7 +472,7 @@ class _ChatPageState extends State<ChatPage> {
     _scrollToBottom();
 
     if (_apiToken.trim().isEmpty) {
-      _showSnack('Добавьте API-токен в настройках');
+      _showSnack(Translations.of(context).get('api_token_error') == 'api_token_error' ? 'Добавьте API-токен в настройках' : Translations.of(context).get('api_token_error'));
       return;
     }
 
@@ -640,8 +643,9 @@ class _ChatPageState extends State<ChatPage> {
 
   @override
   Widget build(BuildContext context) {
+    final l10n = Translations.of(context);
     if (!_settingsReady) {
-      return const Scaffold(
+      return Scaffold(
         backgroundColor: AppColors.bg,
         body: Center(child: CircularProgressIndicator(color: AppColors.accent)),
       );
@@ -743,6 +747,7 @@ class _ChatPageState extends State<ChatPage> {
   }
 
   PreferredSizeWidget _buildAppBar() {
+    final l10n = Translations.of(context);
     return AppBar(
       backgroundColor: AppColors.bg,
       surfaceTintColor: Colors.transparent,
@@ -798,7 +803,7 @@ class _ChatPageState extends State<ChatPage> {
             size: 20,
             color: AppColors.textSecondary,
           ),
-          tooltip: 'Новый чат',
+          tooltip: l10n.newChat,
           style: IconButton.styleFrom(
             shape: RoundedRectangleBorder(
               borderRadius: BorderRadius.circular(10),
@@ -813,7 +818,7 @@ class _ChatPageState extends State<ChatPage> {
             size: 20,
             color: AppColors.textSecondary,
           ),
-          tooltip: 'История',
+          tooltip: l10n.history,
           style: IconButton.styleFrom(
             shape: RoundedRectangleBorder(
               borderRadius: BorderRadius.circular(10),

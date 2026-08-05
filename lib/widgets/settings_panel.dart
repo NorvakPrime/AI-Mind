@@ -1,6 +1,9 @@
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
 
+import '../l10n/translations.dart';
 import '../models/ai_model.dart';
+import '../services/locale_service.dart';
 import '../services/open_router_service.dart';
 import '../services/settings_service.dart';
 import '../theme/app_colors.dart';
@@ -218,6 +221,9 @@ class _SettingsPanelState extends State<SettingsPanel> {
 
   @override
   Widget build(BuildContext context) {
+    final l10n = Translations.of(context);
+    final localeProvider = context.watch<LocaleProvider>();
+
     return Container(
       decoration: BoxDecoration(
         border: widget.showSideBorder
@@ -231,10 +237,10 @@ class _SettingsPanelState extends State<SettingsPanel> {
           if (widget.showSideBorder) ...[
             Row(
               children: [
-                const Expanded(
+                Expanded(
                   child: Text(
-                    'Настройки',
-                    style: TextStyle(
+                    l10n.settings,
+                    style: const TextStyle(
                       fontSize: 17,
                       fontWeight: FontWeight.w600,
                       color: AppColors.textPrimary,
@@ -245,15 +251,61 @@ class _SettingsPanelState extends State<SettingsPanel> {
                   onPressed: _reset,
                   icon: const Icon(Icons.refresh_rounded, size: 18),
                   color: AppColors.textMuted,
-                  tooltip: 'Сбросить',
+                  tooltip: l10n.get('reset'),
                 ),
               ],
             ),
             const SizedBox(height: 16),
           ],
 
+          // --- Язык приложения ---
+          SectionHeader(title: l10n.get('app_language'), icon: Icons.language_rounded),
+          const SizedBox(height: 8),
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+            decoration: BoxDecoration(
+              color: AppColors.surface,
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(color: AppColors.surfaceBorder, width: 0.5),
+            ),
+            child: DropdownButtonHideUnderline(
+              child: DropdownButton<String>(
+                value: localeProvider.locale.languageCode,
+                dropdownColor: AppColors.surfaceLight,
+                isExpanded: true,
+                icon: const Icon(Icons.keyboard_arrow_down_rounded, color: AppColors.textMuted),
+                items: [
+                  DropdownMenuItem(
+                    value: 'en',
+                    child: Row(
+                      children: const [
+                        Text('🇺🇸', style: TextStyle(fontSize: 18)),
+                        SizedBox(width: 12),
+                        Text('English', style: TextStyle(color: AppColors.textPrimary, fontSize: 14)),
+                      ],
+                    ),
+                  ),
+                  DropdownMenuItem(
+                    value: 'ru',
+                    child: Row(
+                      children: const [
+                        Text('🇷🇺', style: TextStyle(fontSize: 18)),
+                        SizedBox(width: 12),
+                        Text('Русский', style: TextStyle(color: AppColors.textPrimary, fontSize: 14)),
+                      ],
+                    ),
+                  ),
+                ],
+                onChanged: (v) {
+                  if (v != null) localeProvider.setLocale(Locale(v));
+                },
+              ),
+            ),
+          ),
+          const SizedBox(height: 24),
+
           // ── API Токен (первым для удобства) ──
-          const SectionHeader(title: 'API токен', icon: Icons.vpn_key_rounded),
+          SectionHeader(title: l10n.apiToken, icon: Icons.vpn_key_rounded),
           const SizedBox(height: 8),
           TextField(
             controller: _apiTokenCtrl,
@@ -298,10 +350,10 @@ class _SettingsPanelState extends State<SettingsPanel> {
                   ),
                 ),
                 const SizedBox(width: 12),
-                const Expanded(
+                Expanded(
                   child: Text(
-                    'Баланс',
-                    style: TextStyle(
+                    l10n.balance,
+                    style: const TextStyle(
                       color: AppColors.textSecondary,
                       fontSize: 13,
                     ),
@@ -338,9 +390,9 @@ class _SettingsPanelState extends State<SettingsPanel> {
           // ── Модель ──
           Row(
             children: [
-              const Expanded(
+              Expanded(
                 child: SectionHeader(
-                  title: 'Модель',
+                  title: l10n.model,
                   icon: Icons.memory_rounded,
                 ),
               ),
@@ -353,8 +405,8 @@ class _SettingsPanelState extends State<SettingsPanel> {
                           final token = _apiTokenCtrl.text.trim();
                           if (token.isEmpty) {
                             ScaffoldMessenger.of(context).showSnackBar(
-                              const SnackBar(
-                                content: Text('Сначала введите API токен'),
+                              SnackBar(
+                                content: Text(l10n.get('api_token_error') == 'api_token_error' ? 'Сначала введите API токен' : l10n.get('api_token_error')),
                               ),
                             );
                             return;
@@ -372,7 +424,7 @@ class _SettingsPanelState extends State<SettingsPanel> {
                         )
                       : const Icon(Icons.refresh_rounded, size: 14),
                   label: Text(
-                    _modelsLoading ? 'Загрузка…' : 'Обновить',
+                    _modelsLoading ? l10n.get('loading') : l10n.get('update'),
                     style: const TextStyle(fontSize: 12),
                   ),
                   style: TextButton.styleFrom(
@@ -406,17 +458,17 @@ class _SettingsPanelState extends State<SettingsPanel> {
                 Icons.keyboard_arrow_down_rounded,
                 color: AppColors.textMuted,
               ),
-              decoration: const InputDecoration(
+              decoration: InputDecoration(
                 border: InputBorder.none,
                 enabledBorder: InputBorder.none,
                 focusedBorder: InputBorder.none,
                 filled: false,
-                contentPadding: EdgeInsets.symmetric(
+                contentPadding: const EdgeInsets.symmetric(
                   horizontal: 16,
                   vertical: 4,
                 ),
-                hintText: 'Выберите модель',
-                hintStyle: TextStyle(color: AppColors.textMuted, fontSize: 14),
+                hintText: l10n.get('select_model'),
+                hintStyle: const TextStyle(color: AppColors.textMuted, fontSize: 14),
               ),
               items: _models
                   .map(
@@ -487,7 +539,7 @@ class _SettingsPanelState extends State<SettingsPanel> {
           const SizedBox(height: 28),
 
           // ── Параметры ──
-          const SectionHeader(title: 'Параметры', icon: Icons.tune_rounded),
+          SectionHeader(title: l10n.parameters, icon: Icons.tune_rounded),
           const SizedBox(height: 8),
           Container(
             padding: const EdgeInsets.all(16),
@@ -499,7 +551,7 @@ class _SettingsPanelState extends State<SettingsPanel> {
             child: Column(
               children: [
                 SliderParam(
-                  label: 'Температура',
+                  label: l10n.temperature,
                   value: _temperature,
                   max: 2,
                   onChanged: (v) {
@@ -509,7 +561,7 @@ class _SettingsPanelState extends State<SettingsPanel> {
                 ),
                 const Divider(color: AppColors.surfaceBorder, height: 20),
                 SliderParam(
-                  label: 'Top P',
+                  label: l10n.topP,
                   value: _topP,
                   max: 1,
                   onChanged: (v) {
@@ -519,7 +571,7 @@ class _SettingsPanelState extends State<SettingsPanel> {
                 ),
                 const Divider(color: AppColors.surfaceBorder, height: 20),
                 SliderParam(
-                  label: 'Макс. токенов',
+                  label: l10n.maxTokens,
                   value: _maxTokens,
                   min: 256,
                   max: 8192,
@@ -547,13 +599,13 @@ class _SettingsPanelState extends State<SettingsPanel> {
               borderRadius: BorderRadius.circular(12),
               child: SwitchListTile(
                 contentPadding: const EdgeInsets.symmetric(horizontal: 16),
-                title: const Text(
-                  'Потоковые ответы',
-                  style: TextStyle(color: AppColors.textPrimary, fontSize: 14),
+                title: Text(
+                  l10n.streaming,
+                  style: const TextStyle(color: AppColors.textPrimary, fontSize: 14),
                 ),
-                subtitle: const Text(
-                  'Показывать ответ по мере генерации',
-                  style: TextStyle(color: AppColors.textMuted, fontSize: 12),
+                subtitle: Text(
+                  l10n.streamingDesc,
+                  style: const TextStyle(color: AppColors.textMuted, fontSize: 12),
                 ),
                 activeThumbColor: AppColors.accent,
                 value: _streaming,
@@ -580,14 +632,14 @@ class _SettingsPanelState extends State<SettingsPanel> {
                 ),
                 padding: const EdgeInsets.symmetric(vertical: 14),
               ),
-              child: const Text('Сбросить всё', style: TextStyle(fontSize: 14)),
+              child: Text(l10n.resetAll, style: const TextStyle(fontSize: 14)),
             ),
           ),
           const SizedBox(height: 16),
-          const Text(
-            'Токен хранится только на устройстве',
+          Text(
+            l10n.tokenStoredLocally,
             textAlign: TextAlign.center,
-            style: TextStyle(color: AppColors.textMuted, fontSize: 11),
+            style: const TextStyle(color: AppColors.textMuted, fontSize: 11),
           ),
         ],
       ),

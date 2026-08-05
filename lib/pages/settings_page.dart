@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../l10n/translations.dart';
 import '../models/ai_model.dart';
 import '../services/settings_service.dart';
 import '../theme/app_colors.dart';
@@ -41,9 +42,9 @@ class SettingsPage extends StatelessWidget {
         backgroundColor: AppColors.bg,
         surfaceTintColor: Colors.transparent,
         elevation: 0,
-        title: const Text(
-          'Настройки',
-          style: TextStyle(
+        title: Text(
+          Translations.of(context).settings,
+          style: const TextStyle(
             fontSize: 17,
             fontWeight: FontWeight.w600,
             color: AppColors.textPrimary,

@@ -1,11 +1,19 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:flutter_localizations/flutter_localizations.dart';
+import 'package:provider/provider.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
+import 'l10n/translations.dart';
 import 'pages/chat_page.dart';
+import 'pages/language_selection_page.dart';
+import 'services/locale_service.dart';
 import 'theme/app_colors.dart';
 
-void main() {
+void main() async {
   WidgetsFlutterBinding.ensureInitialized();
+  final prefs = await SharedPreferences.getInstance();
+
   SystemChrome.setSystemUIOverlayStyle(
     const SystemUiOverlayStyle(
       statusBarColor: Colors.transparent,
@@ -13,7 +21,12 @@ void main() {
       systemNavigationBarColor: Color(0xFF0C0B10),
     ),
   );
-  runApp(const AiMindApp());
+  runApp(
+    ChangeNotifierProvider(
+      create: (_) => LocaleProvider(prefs),
+      child: const AiMindApp(),
+    ),
+  );
 }
 
 class AiMindApp extends StatelessWidget {
@@ -21,9 +34,19 @@ class AiMindApp extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final localeProvider = context.watch<LocaleProvider>();
+
     return MaterialApp(
       debugShowCheckedModeBanner: false,
       title: 'AI Mind',
+      locale: localeProvider.locale,
+      supportedLocales: const [Locale('en'), Locale('ru')],
+      localizationsDelegates: const [
+        TranslationsDelegate(),
+        GlobalMaterialLocalizations.delegate,
+        GlobalWidgetsLocalizations.delegate,
+        GlobalCupertinoLocalizations.delegate,
+      ],
       theme: ThemeData(
         brightness: Brightness.dark,
         colorScheme: ColorScheme.fromSeed(
@@ -87,7 +110,9 @@ class AiMindApp extends StatelessWidget {
           behavior: SnackBarBehavior.floating,
         ),
       ),
-      home: const ChatPage(),
+      home: localeProvider.isFirstRun
+          ? const LanguageSelectionPage()
+          : const ChatPage(),
     );
   }
 }

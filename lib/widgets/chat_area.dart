@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_markdown/flutter_markdown.dart';
 
+import '../l10n/translations.dart';
 import '../models/message.dart';
 import '../theme/app_colors.dart';
 import '../utils/animations.dart';
@@ -80,6 +81,7 @@ class _EmptyState extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final l10n = Translations.of(context);
     return Center(
       child: Column(
         mainAxisSize: MainAxisSize.min,
@@ -105,18 +107,18 @@ class _EmptyState extends StatelessWidget {
             ),
           ),
           const SizedBox(height: 20),
-          const Text(
-            'Начните диалог',
-            style: TextStyle(
+          Text(
+            l10n.startDialog,
+            style: const TextStyle(
               fontSize: 18,
               fontWeight: FontWeight.w600,
               color: AppColors.textPrimary,
             ),
           ),
           const SizedBox(height: 8),
-          const Text(
-            'Задайте любой вопрос',
-            style: TextStyle(color: AppColors.textMuted, fontSize: 13),
+          Text(
+            l10n.askAnything,
+            style: const TextStyle(color: AppColors.textMuted, fontSize: 13),
           ),
         ],
       ),
@@ -238,19 +240,19 @@ class MessageBubble extends StatelessWidget {
                 children: [
                   _ActionButton(
                     icon: Icons.edit_outlined,
-                    label: 'Изм.',
+                    label: Translations.of(context).editResponseShort,
                     onTap: () => _showEditDialog(context),
                   ),
                   const SizedBox(width: 12),
                   _ActionButton(
                     icon: Icons.refresh_rounded,
-                    label: 'Ещё раз',
+                    label: Translations.of(context).regenerate,
                     onTap: onRegenerate,
                   ),
                   const SizedBox(width: 12),
                   _ActionButton(
                     icon: Icons.delete_outline_rounded,
-                    label: 'Удалить',
+                    label: Translations.of(context).delete,
                     onTap: onDelete,
                   ),
                 ],
@@ -262,28 +264,29 @@ class MessageBubble extends StatelessWidget {
   }
 
   void _showEditDialog(BuildContext context) {
+    final l10n = Translations.of(context);
     final controller = TextEditingController(text: message.text);
     showAnimatedDialog(
       context: context,
       builder: (context) => AlertDialog(
         backgroundColor: AppColors.surfaceLight,
-        title: const Text(
-          'Редактировать ответ',
-          style: TextStyle(color: AppColors.textPrimary, fontSize: 16),
+        title: Text(
+          l10n.editResponse,
+          style: const TextStyle(color: AppColors.textPrimary, fontSize: 16),
         ),
         content: TextField(
           controller: controller,
           maxLines: 10,
           minLines: 1,
           style: const TextStyle(color: AppColors.textPrimary, fontSize: 14),
-          decoration: const InputDecoration(hintText: 'Текст сообщения...'),
+          decoration: InputDecoration(hintText: l10n.messageHint),
         ),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context),
-            child: const Text(
-              'Отмена',
-              style: TextStyle(color: AppColors.textSecondary),
+            child: Text(
+              l10n.cancel,
+              style: const TextStyle(color: AppColors.textSecondary),
             ),
           ),
           ElevatedButton(
@@ -292,9 +295,9 @@ class MessageBubble extends StatelessWidget {
               Navigator.pop(context);
             },
             style: ElevatedButton.styleFrom(backgroundColor: AppColors.accent),
-            child: const Text(
-              'Сохранить',
-              style: TextStyle(color: Colors.white),
+            child: Text(
+              l10n.save,
+              style: const TextStyle(color: Colors.white),
             ),
           ),
         ],
@@ -450,13 +453,13 @@ class _InputBarState extends State<InputBar> {
                 cursorColor: AppColors.accent,
                 onSubmitted: (_) => widget.onSend(),
                 enabled: !widget.isLoading,
-                decoration: const InputDecoration(
-                  hintText: 'Сообщение…',
+                decoration: InputDecoration(
+                  hintText: Translations.of(context).messageHint,
                   border: InputBorder.none,
                   enabledBorder: InputBorder.none,
                   focusedBorder: InputBorder.none,
                   filled: false,
-                  contentPadding: EdgeInsets.symmetric(
+                  contentPadding: const EdgeInsets.symmetric(
                     horizontal: 16,
                     vertical: 12,
                   ),

@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../models/chat_session.dart';
 import '../theme/app_colors.dart';
 import '../utils/animations.dart';
+import '../l10n/translations.dart';
 
 class ChatHistoryPage extends StatefulWidget {
   const ChatHistoryPage({
@@ -27,15 +28,16 @@ class ChatHistoryPage extends StatefulWidget {
 class _ChatHistoryPageState extends State<ChatHistoryPage> {
   @override
   Widget build(BuildContext context) {
+    final l10n = Translations.of(context);
     return Scaffold(
       backgroundColor: AppColors.bg,
       appBar: AppBar(
         backgroundColor: AppColors.bg,
         surfaceTintColor: Colors.transparent,
         elevation: 0,
-        title: const Text(
-          'Чаты',
-          style: TextStyle(
+        title: Text(
+          l10n.history,
+          style: const TextStyle(
             fontSize: 17,
             fontWeight: FontWeight.w600,
             color: AppColors.textPrimary,
@@ -54,7 +56,7 @@ class _ChatHistoryPageState extends State<ChatHistoryPage> {
               size: 20,
               color: AppColors.accent,
             ),
-            tooltip: 'Новый чат',
+            tooltip: l10n.newChat,
           ),
           const SizedBox(width: 8),
         ],
@@ -70,9 +72,9 @@ class _ChatHistoryPageState extends State<ChatHistoryPage> {
                     color: AppColors.textMuted,
                   ),
                   const SizedBox(height: 12),
-                  const Text(
-                    'Нет чатов',
-                    style: TextStyle(color: AppColors.textMuted, fontSize: 15),
+                  Text(
+                    l10n.emptyChats,
+                    style: const TextStyle(color: AppColors.textMuted, fontSize: 15),
                   ),
                 ],
               ),
@@ -188,26 +190,27 @@ class _ChatHistoryPageState extends State<ChatHistoryPage> {
   }
 
   void _showDeleteConfirmation(BuildContext context, ChatSession session) {
+    final l10n = Translations.of(context);
     showAnimatedDialog(
       context: context,
       builder: (context) => AlertDialog(
         backgroundColor: AppColors.surfaceLight,
         surfaceTintColor: Colors.transparent,
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-        title: const Text(
-          'Удалить чат?',
-          style: TextStyle(color: AppColors.textPrimary, fontSize: 18),
+        title: Text(
+          l10n.deleteChatTitle,
+          style: const TextStyle(color: AppColors.textPrimary, fontSize: 18),
         ),
         content: Text(
-          'Вы уверены, что хотите удалить чат "${session.displayTitle}"? Это действие нельзя отменить.',
+          l10n.deleteChatDesc(session.displayTitle),
           style: const TextStyle(color: AppColors.textSecondary, fontSize: 14),
         ),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context),
-            child: const Text(
-              'Отмена',
-              style: TextStyle(color: AppColors.textMuted),
+            child: Text(
+              l10n.cancel,
+              style: const TextStyle(color: AppColors.textMuted),
             ),
           ),
           TextButton(
@@ -217,9 +220,9 @@ class _ChatHistoryPageState extends State<ChatHistoryPage> {
               // Вызываем setState, чтобы перерисовать список в истории
               setState(() {});
             },
-            child: const Text(
-              'Удалить',
-              style: TextStyle(
+            child: Text(
+              l10n.delete,
+              style: const TextStyle(
                 color: Colors.redAccent,
                 fontWeight: FontWeight.w600,
               ),
