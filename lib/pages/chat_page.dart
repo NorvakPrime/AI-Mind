@@ -61,6 +61,8 @@ class _ChatPageState extends State<ChatPage> {
   double _topP = 0.9;
   double _maxTokens = 2048;
   bool _streaming = false;
+  String? _reasoningEffort;
+  String? _reasoningSummary;
   bool _settingsReady = false;
 
   List<AiModel> _models = [];
@@ -117,6 +119,8 @@ class _ChatPageState extends State<ChatPage> {
       _topP = _settings.topP;
       _maxTokens = _settings.maxTokens;
       _streaming = _settings.streaming;
+      _reasoningEffort = _settings.reasoningEffort;
+      _reasoningSummary = _settings.reasoningSummary;
       _models = cached.isNotEmpty ? cached : List.of(kDefaultModels);
       _sessions = sessions;
 
@@ -411,6 +415,36 @@ class _ChatPageState extends State<ChatPage> {
     _saveSessions();
   }
 
+  Map<String, dynamic>? get _reasoningConfig {
+    if (_reasoningEffort == null && _reasoningSummary == null) return null;
+    return {
+      if (_reasoningEffort != null) 'effort': _reasoningEffort,
+      if (_reasoningSummary != null) 'summary': _reasoningSummary,
+    };
+  }
+
+  bool get _shouldIncludeReasoning {
+    final model = _findModel(_modelId);
+    return model?.supportedParameters.contains('include_reasoning') ?? false;
+  }
+
+  /// Парсит ответ модели, разделяя мысли и основной контент
+  Message _parseReply(String reply) {
+    final thinkRegex = RegExp(r'<think>(.*?)(?:</think>|$)', dotAll: true);
+    final match = thinkRegex.firstMatch(reply);
+    if (match != null) {
+      final thought = match.group(1)?.trim();
+      final content = reply.replaceFirst(thinkRegex, '').trim();
+      return Message(
+        content,
+        fromUser: false,
+        timestamp: DateTime.now(),
+        thought: thought,
+      );
+    }
+    return Message(reply, fromUser: false, timestamp: DateTime.now());
+  }
+
   Future<void> _send() async {
     final text = _messageController.text.trim();
     if (text.isEmpty || _isLoading || _activeSession == null) return;
@@ -446,12 +480,12 @@ class _ChatPageState extends State<ChatPage> {
           modelId: _modelId,
           history: _activeSession!.messages,
           systemPrompt: _activeSession!.systemPrompt,
+          reasoning: _reasoningConfig,
+          includeReasoning: _shouldIncludeReasoning,
         );
         if (!mounted) return;
         setState(() {
-          _activeSession!.messages.add(
-            Message(reply, fromUser: false, timestamp: DateTime.now()),
-          );
+          _activeSession!.messages.add(_parseReply(reply));
           _isLoading = false;
         });
         _scrollToBottom();
@@ -485,12 +519,12 @@ class _ChatPageState extends State<ChatPage> {
           modelId: _modelId,
           history: _activeSession!.messages,
           systemPrompt: _activeSession!.systemPrompt,
+          reasoning: _reasoningConfig,
+          includeReasoning: _shouldIncludeReasoning,
         );
         if (!mounted) return;
         setState(() {
-          _activeSession!.messages.add(
-            Message(reply, fromUser: false, timestamp: DateTime.now()),
-          );
+          _activeSession!.messages.add(_parseReply(reply));
           _isLoading = false;
         });
         _scrollToBottom();
@@ -522,6 +556,8 @@ class _ChatPageState extends State<ChatPage> {
           modelId: _modelId,
           history: session.messages,
           systemPrompt: session.systemPrompt,
+          reasoning: _reasoningConfig,
+          includeReasoning: _shouldIncludeReasoning,
         )
         .listen(
           (chunk) {
@@ -545,7 +581,11 @@ class _ChatPageState extends State<ChatPage> {
           },
           onDone: () {
             if (!mounted) return;
-            setState(() => _isLoading = false);
+            setState(() {
+              final lastIdx = session.messages.length - 1;
+              session.messages[lastIdx] = _parseReply(fullReply);
+              _isLoading = false;
+            });
             _saveSessions();
             if (!completer.isCompleted) completer.complete();
           },
@@ -557,9 +597,53 @@ class _ChatPageState extends State<ChatPage> {
 
   void _showSnack(String message) {
     setState(() => _isLoading = false);
+
+    // Если это ошибка 429 (Too Many Requests)
+    if (message.contains('429')) {
+      final model = _findModel(_modelId);
+      final isFree = model != null &&
+          (model.promptPrice ?? 0) == 0 &&
+          (model.completionPrice ?? 0) == 0;
+
+      if (isFree) {
+        _show429Dialog();
+        return;
+      }
+    }
+
     ScaffoldMessenger.of(
       context,
     ).showSnackBar(SnackBar(content: Text(message)));
+  }
+
+  void _show429Dialog() {
+    final l10n = Translations.of(context);
+    showAnimatedDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        backgroundColor: AppColors.surfaceLight,
+        title: Row(
+          children: [
+            const Icon(Icons.speed_rounded, color: Colors.orange, size: 24),
+            const SizedBox(width: 12),
+            Expanded(child: Text(l10n.get('error_429_title'))),
+          ],
+        ),
+        content: Text(
+          l10n.get('error_429_desc'),
+          style: const TextStyle(color: AppColors.textSecondary, fontSize: 14),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: Text(
+              l10n.get('got_it'),
+              style: const TextStyle(color: AppColors.accentLight),
+            ),
+          ),
+        ],
+      ),
+    );
   }
 
   void _scrollToBottom() {
@@ -589,6 +673,8 @@ class _ChatPageState extends State<ChatPage> {
             topP: _topP,
             maxTokens: _maxTokens,
             streaming: _streaming,
+            reasoningEffort: _reasoningEffort,
+            reasoningSummary: _reasoningSummary,
             onModelChanged: (v) => setState(() => _modelId = v),
             onModelsUpdated: (list) => setState(() => _models = list),
             onSettingsChanged: _reloadFromSettings,
@@ -627,6 +713,8 @@ class _ChatPageState extends State<ChatPage> {
       _topP = _settings.topP;
       _maxTokens = _settings.maxTokens;
       _streaming = _settings.streaming;
+      _reasoningEffort = _settings.reasoningEffort;
+      _reasoningSummary = _settings.reasoningSummary;
       final cached = _settings.cachedModels;
       if (cached.isNotEmpty) _models = cached;
     });
@@ -660,11 +748,7 @@ class _ChatPageState extends State<ChatPage> {
       onSend: _send,
       onEditMessage: (index, newText) {
         setState(() {
-          _activeSession!.messages[index] = Message(
-            newText,
-            fromUser: false,
-            timestamp: DateTime.now(),
-          );
+          _activeSession!.messages[index] = _parseReply(newText);
         });
         _saveSessions();
       },
@@ -870,6 +954,8 @@ class _ChatPageState extends State<ChatPage> {
         topP: _topP,
         maxTokens: _maxTokens,
         streaming: _streaming,
+        reasoningEffort: _reasoningEffort,
+        reasoningSummary: _reasoningSummary,
         onModelChanged: (v) => setState(() => _modelId = v),
         onModelsUpdated: (list) => setState(() => _models = list),
         onSettingsChanged: _reloadFromSettings,

@@ -17,6 +17,8 @@ class SettingsService {
   static const _kActiveChatId = 'active_chat_id';
   static const _kNsfwDefault = 'nsfw_default';
   static const _kLanguageDefault = 'language_default';
+  static const _kReasoningEffort = 'reasoning_effort';
+  static const _kReasoningSummary = 'reasoning_summary';
 
   final SharedPreferences _prefs;
   SettingsService(this._prefs);
@@ -97,6 +99,18 @@ class SettingsService {
   String get languageDefault => _prefs.getString(_kLanguageDefault) ?? 'Auto';
   Future<void> setLanguageDefault(String v) =>
       _prefs.setString(_kLanguageDefault, v);
+
+  // ── Reasoning Effort ──
+  String? get reasoningEffort => _prefs.getString(_kReasoningEffort);
+  Future<void> setReasoningEffort(String? v) => v == null
+      ? _prefs.remove(_kReasoningEffort)
+      : _prefs.setString(_kReasoningEffort, v);
+
+  // ── Reasoning Summary ──
+  String? get reasoningSummary => _prefs.getString(_kReasoningSummary);
+  Future<void> setReasoningSummary(String? v) => v == null
+      ? _prefs.remove(_kReasoningSummary)
+      : _prefs.setString(_kReasoningSummary, v);
 
   // ── Сброс ──
   Future<void> clear() async {

@@ -58,6 +58,29 @@ class Translations {
       'app_language': 'App Language',
       'api_token_error': 'Add API token in settings',
       'error': 'Error',
+      'thought': 'Thought',
+      'search_model': 'Search model...',
+      'reasoning': 'Reasoning',
+      'reasoning_effort': 'Reasoning Effort',
+      'reasoning_summary': 'Reasoning Summary',
+      'reasoning_warning': 'Not all models support reasoning parameters. Use them with compatible models.',
+      'none': 'None',
+      'minimal': 'Minimal',
+      'low': 'Low',
+      'medium': 'Medium',
+      'high': 'High',
+      'xhigh': 'Extreme High',
+      'max': 'Max',
+      'concise': 'Concise',
+      'detailed': 'Detailed',
+      'all_models': 'All',
+      'free_models': 'Free',
+      'paid_models': 'Paid',
+      'reasoning_models': 'Reasoning',
+      'no_reasoning_models': 'No Reasoning',
+      'error_429_title': 'Model is Overloaded',
+      'error_429_desc': 'Free models are often under high load and may return errors. Try a different model or switch to a paid one for stable access.',
+      'got_it': 'Got it',
     },
     'ru': {
       'app_title': 'AI Mind',
@@ -108,6 +131,29 @@ class Translations {
       'app_language': 'Язык приложения',
       'api_token_error': 'Добавьте API-токен в настройках',
       'error': 'Ошибка',
+      'thought': 'Мысли',
+      'search_model': 'Поиск модели...',
+      'reasoning': 'Размышления',
+      'reasoning_effort': 'Уровень усилий (Effort)',
+      'reasoning_summary': 'Сводка (Summary)',
+      'reasoning_warning': 'Не все модели поддерживают параметры размышления. Используйте их с совместимыми моделями.',
+      'none': 'Нет',
+      'minimal': 'Минимально',
+      'low': 'Низко',
+      'medium': 'Средне',
+      'high': 'Высоко',
+      'xhigh': 'Очень высоко',
+      'max': 'Максимум',
+      'concise': 'Кратко',
+      'detailed': 'Детально',
+      'all_models': 'Все',
+      'free_models': 'Бесплатные',
+      'paid_models': 'Платные',
+      'reasoning_models': 'Думающие',
+      'no_reasoning_models': 'Без мыслей',
+      'error_429_title': 'Модель перегружена',
+      'error_429_desc': 'Бесплатные модели часто перегружены и могут выдавать ошибки. Попробуйте другую модель или перейдите на платные для стабильной работы.',
+      'got_it': 'Понятно',
     },
   };
 
@@ -148,6 +194,11 @@ class Translations {
   String get languagePriority => get('language_priority');
   String get auto => get('auto');
   String get editResponseShort => get('edit_response_short');
+  String get thought => get('thought');
+  String get reasoning => get('reasoning');
+  String get reasoningEffort => get('reasoning_effort');
+  String get reasoningSummary => get('reasoning_summary');
+  String get reasoningWarning => get('reasoning_warning');
 }
 
 class TranslationsDelegate extends LocalizationsDelegate<Translations> {

@@ -17,6 +17,8 @@ class SettingsPage extends StatelessWidget {
     required this.topP,
     required this.maxTokens,
     required this.streaming,
+    this.reasoningEffort,
+    this.reasoningSummary,
     required this.onModelChanged,
     required this.onModelsUpdated,
     required this.onSettingsChanged,
@@ -30,6 +32,8 @@ class SettingsPage extends StatelessWidget {
   final double topP;
   final double maxTokens;
   final bool streaming;
+  final String? reasoningEffort;
+  final String? reasoningSummary;
   final ValueChanged<String> onModelChanged;
   final ValueChanged<List<AiModel>> onModelsUpdated;
   final VoidCallback onSettingsChanged;
@@ -67,6 +71,8 @@ class SettingsPage extends StatelessWidget {
           topP: topP,
           maxTokens: maxTokens,
           streaming: streaming,
+          reasoningEffort: reasoningEffort,
+          reasoningSummary: reasoningSummary,
           onModelChanged: onModelChanged,
           onModelsUpdated: onModelsUpdated,
           onSettingsChanged: onSettingsChanged,

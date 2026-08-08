@@ -5,6 +5,7 @@ import '../l10n/translations.dart';
 import '../models/message.dart';
 import '../theme/app_colors.dart';
 import '../utils/animations.dart';
+import '../utils/logger.dart';
 
 // ───────────────────────── Область чата ─────────────────────────
 
@@ -149,85 +150,110 @@ class MessageBubble extends StatelessWidget {
     final isUser = message.fromUser;
     final showActions = !isUser && isLast;
 
+    // Используем отдельное поле для мыслей, если оно есть.
+    // Если нет (например, при стриминге), пытаемся распарсить из текста.
+    String? thought = message.thought;
+    String content = message.text;
+
+    if (!isUser && thought == null) {
+      final thinkRegex = RegExp(r'<think>(.*?)(?:</think>|$)', dotAll: true);
+      final match = thinkRegex.firstMatch(message.text);
+      if (match != null) {
+        thought = match.group(1)?.trim();
+        content = message.text.replaceFirst(thinkRegex, '').trim();
+        AppLogger.log('Found reasoning in text: ${thought?.length} chars',
+            tag: 'UI');
+      }
+    }
+
     return Padding(
       padding: const EdgeInsets.only(bottom: 16),
       child: Column(
-        crossAxisAlignment: isUser
-            ? CrossAxisAlignment.end
-            : CrossAxisAlignment.start,
+        crossAxisAlignment:
+            isUser ? CrossAxisAlignment.end : CrossAxisAlignment.start,
         children: [
           Row(
-            mainAxisAlignment: isUser
-                ? MainAxisAlignment.end
-                : MainAxisAlignment.start,
+            mainAxisAlignment:
+                isUser ? MainAxisAlignment.end : MainAxisAlignment.start,
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               if (!isUser) ...[_buildAvatar(), const SizedBox(width: 10)],
               Flexible(
-                child: Container(
-                  constraints: const BoxConstraints(maxWidth: 560),
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 16,
-                    vertical: 12,
-                  ),
-                  decoration: BoxDecoration(
-                    color: isUser ? AppColors.userBubble : AppColors.botBubble,
-                    borderRadius: BorderRadius.only(
-                      topLeft: const Radius.circular(16),
-                      topRight: const Radius.circular(16),
-                      bottomLeft: Radius.circular(isUser ? 16 : 4),
-                      bottomRight: Radius.circular(isUser ? 4 : 16),
-                    ),
-                    border: Border.all(
-                      color: isUser
-                          ? AppColors.accentDim.withValues(alpha: 0.3)
-                          : AppColors.surfaceBorder.withValues(alpha: 0.5),
-                      width: 0.5,
-                    ),
-                  ),
-                  child: MarkdownBody(
-                    data: message.text,
-                    selectable: true,
-                    styleSheet: MarkdownStyleSheet(
-                      p: TextStyle(
-                        fontSize: 14.5,
-                        height: 1.55,
-                        color: isUser
-                            ? AppColors.textPrimary
-                            : AppColors.textPrimary.withValues(alpha: 0.9),
-                      ),
-                      em: TextStyle(
-                        fontStyle: FontStyle.italic,
-                        color: isUser
-                            ? const Color(0xFFADFFD1)
-                            : AppColors.accentLight,
-                        letterSpacing: 0.2,
-                      ),
-                      code: const TextStyle(
-                        backgroundColor: AppColors.bg,
-                        color: AppColors.accentLight,
-                        fontFamily: 'monospace',
-                        fontSize: 13,
-                      ),
-                      codeblockDecoration: BoxDecoration(
-                        color: AppColors.bg,
-                        borderRadius: BorderRadius.circular(8),
-                        border: Border.all(
-                          color: AppColors.surfaceBorder,
-                          width: 0.5,
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    if (thought != null && thought.isNotEmpty)
+                      _ThoughtBlock(thought: thought),
+                    if (content.isNotEmpty || isUser)
+                      Container(
+                        constraints: const BoxConstraints(maxWidth: 560),
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 16,
+                          vertical: 12,
+                        ),
+                        decoration: BoxDecoration(
+                          color: isUser
+                              ? AppColors.userBubble
+                              : AppColors.botBubble,
+                          borderRadius: BorderRadius.only(
+                            topLeft: const Radius.circular(16),
+                            topRight: const Radius.circular(16),
+                            bottomLeft: Radius.circular(isUser ? 16 : 4),
+                            bottomRight: Radius.circular(isUser ? 4 : 16),
+                          ),
+                          border: Border.all(
+                            color: isUser
+                                ? AppColors.accentDim.withValues(alpha: 0.3)
+                                : AppColors.surfaceBorder.withValues(alpha: 0.5),
+                            width: 0.5,
+                          ),
+                        ),
+                        child: MarkdownBody(
+                          data: content,
+                          selectable: true,
+                          styleSheet: MarkdownStyleSheet(
+                            p: TextStyle(
+                              fontSize: 14.5,
+                              height: 1.55,
+                              color: isUser
+                                  ? AppColors.textPrimary
+                                  : AppColors.textPrimary.withValues(alpha: 0.9),
+                            ),
+                            em: TextStyle(
+                              fontStyle: FontStyle.italic,
+                              color: isUser
+                                  ? const Color(0xFFADFFD1)
+                                  : AppColors.accentLight,
+                              letterSpacing: 0.2,
+                            ),
+                            code: const TextStyle(
+                              backgroundColor: AppColors.bg,
+                              color: AppColors.accentLight,
+                              fontFamily: 'monospace',
+                              fontSize: 13,
+                            ),
+                            codeblockDecoration: BoxDecoration(
+                              color: AppColors.bg,
+                              borderRadius: BorderRadius.circular(8),
+                              border: Border.all(
+                                color: AppColors.surfaceBorder,
+                                width: 0.5,
+                              ),
+                            ),
+                            blockquote: const TextStyle(
+                              color: AppColors.textSecondary,
+                              fontStyle: FontStyle.italic,
+                            ),
+                            blockquoteDecoration: const BoxDecoration(
+                              border: Border(
+                                left:
+                                    BorderSide(color: AppColors.accent, width: 3),
+                              ),
+                            ),
+                          ),
                         ),
                       ),
-                      blockquote: const TextStyle(
-                        color: AppColors.textSecondary,
-                        fontStyle: FontStyle.italic,
-                      ),
-                      blockquoteDecoration: const BoxDecoration(
-                        border: Border(
-                          left: BorderSide(color: AppColors.accent, width: 3),
-                        ),
-                      ),
-                    ),
-                  ),
+                  ],
                 ),
               ),
               if (isUser) ...[const SizedBox(width: 10), _buildUserAvatar()],
@@ -330,6 +356,104 @@ class MessageBubble extends StatelessWidget {
         Icons.person_rounded,
         size: 16,
         color: AppColors.textSecondary,
+      ),
+    );
+  }
+}
+
+// ───────────────────────── Блок размышлений ─────────────────────────
+
+class _ThoughtBlock extends StatefulWidget {
+  const _ThoughtBlock({required this.thought});
+  final String thought;
+
+  @override
+  State<_ThoughtBlock> createState() => _ThoughtBlockState();
+}
+
+class _ThoughtBlockState extends State<_ThoughtBlock> {
+  bool _isExpanded = false;
+
+  @override
+  Widget build(BuildContext context) {
+    final l10n = Translations.of(context);
+
+    return Container(
+      margin: const EdgeInsets.only(bottom: 12),
+      decoration: BoxDecoration(
+        color: AppColors.surfaceLight.withValues(alpha: 0.4),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(
+          color: AppColors.surfaceBorder.withValues(alpha: 0.6),
+          width: 0.5,
+        ),
+      ),
+      child: AnimatedSize(
+        duration: const Duration(milliseconds: 250),
+        curve: Curves.fastOutSlowIn,
+        alignment: Alignment.topLeft,
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            InkWell(
+              onTap: () => setState(() => _isExpanded = !_isExpanded),
+              borderRadius: BorderRadius.circular(12),
+              child: Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(
+                      _isExpanded
+                          ? Icons.lightbulb_rounded
+                          : Icons.lightbulb_outline_rounded,
+                      size: 14,
+                      color: _isExpanded
+                          ? AppColors.accentLight
+                          : AppColors.textMuted,
+                    ),
+                    const SizedBox(width: 8),
+                    Text(
+                      l10n.thought,
+                      style: TextStyle(
+                        fontSize: 12,
+                        fontWeight: FontWeight.w500,
+                        color: _isExpanded
+                            ? AppColors.textPrimary
+                            : AppColors.textSecondary,
+                      ),
+                    ),
+                    const SizedBox(width: 6),
+                    AnimatedRotation(
+                      turns: _isExpanded ? 0.5 : 0,
+                      duration: const Duration(milliseconds: 200),
+                      child: const Icon(
+                        Icons.keyboard_arrow_down_rounded,
+                        size: 16,
+                        color: AppColors.textMuted,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+            if (_isExpanded)
+              Padding(
+                padding: const EdgeInsets.fromLTRB(12, 0, 12, 12),
+                child: MarkdownBody(
+                  data: widget.thought,
+                  styleSheet: MarkdownStyleSheet(
+                    p: TextStyle(
+                      fontSize: 13,
+                      height: 1.5,
+                      color: AppColors.textSecondary.withValues(alpha: 0.9),
+                    ),
+                  ),
+                ),
+              ),
+          ],
+        ),
       ),
     );
   }
@@ -491,9 +615,7 @@ class _InputBarState extends State<InputBar> {
                       color: _hasText ? Colors.white : AppColors.textMuted,
                     ),
               style: IconButton.styleFrom(
-                backgroundColor: _hasText
-                    ? AppColors.accent
-                    : AppColors.surface,
+                backgroundColor: _hasText ? AppColors.accent : AppColors.surface,
                 disabledBackgroundColor: AppColors.surface,
                 shape: RoundedRectangleBorder(
                   borderRadius: BorderRadius.circular(12),

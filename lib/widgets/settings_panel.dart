@@ -22,6 +22,8 @@ class SettingsPanel extends StatefulWidget {
     required this.topP,
     required this.maxTokens,
     required this.streaming,
+    this.reasoningEffort,
+    this.reasoningSummary,
     required this.onModelChanged,
     required this.onModelsUpdated,
     required this.onSettingsChanged,
@@ -36,6 +38,8 @@ class SettingsPanel extends StatefulWidget {
   final double topP;
   final double maxTokens;
   final bool streaming;
+  final String? reasoningEffort;
+  final String? reasoningSummary;
   final ValueChanged<String> onModelChanged;
   final ValueChanged<List<AiModel>> onModelsUpdated;
   final VoidCallback onSettingsChanged;
@@ -46,6 +50,7 @@ class SettingsPanel extends StatefulWidget {
 
 class _SettingsPanelState extends State<SettingsPanel> {
   final _apiTokenCtrl = TextEditingController();
+  final _searchCtrl = TextEditingController();
   final _service = OpenRouterService();
   bool _hideToken = true;
 
@@ -56,6 +61,9 @@ class _SettingsPanelState extends State<SettingsPanel> {
   late bool _streaming;
   late List<AiModel> _models;
   late String _modelId;
+  String? _reasoningEffort;
+  String? _reasoningSummary;
+  String _filterType = 'all'; // all, free, paid, reasoning, no_reasoning
 
   // Загрузка моделей
   bool _modelsLoading = false;
@@ -76,6 +84,8 @@ class _SettingsPanelState extends State<SettingsPanel> {
     _streaming = widget.streaming;
     _models = List.from(widget.models);
     _modelId = widget.modelId;
+    _reasoningEffort = widget.reasoningEffort;
+    _reasoningSummary = widget.reasoningSummary;
 
     // Авто-загрузка баланса и моделей при старте, если токен уже есть
     final token = widget.apiToken.trim();
@@ -108,6 +118,12 @@ class _SettingsPanelState extends State<SettingsPanel> {
     }
     if (old.modelId != widget.modelId) {
       _modelId = widget.modelId;
+    }
+    if (old.reasoningEffort != widget.reasoningEffort) {
+      _reasoningEffort = widget.reasoningEffort;
+    }
+    if (old.reasoningSummary != widget.reasoningSummary) {
+      _reasoningSummary = widget.reasoningSummary;
     }
   }
 
@@ -195,6 +211,8 @@ class _SettingsPanelState extends State<SettingsPanel> {
       _temperature = 0.7;
       _topP = 0.9;
       _maxTokens = 2048;
+      _reasoningEffort = null;
+      _reasoningSummary = null;
       _modelsLoading = false;
       _modelsError = null;
       _balance = null;
@@ -216,7 +234,70 @@ class _SettingsPanelState extends State<SettingsPanel> {
   @override
   void dispose() {
     _apiTokenCtrl.dispose();
+    _searchCtrl.dispose();
     super.dispose();
+  }
+
+  Widget _buildFilterChip(String label, String type, Translations l10n) {
+    final isSelected = _filterType == type;
+    return FilterChip(
+      label: Text(label, style: const TextStyle(fontSize: 11)),
+      selected: isSelected,
+      onSelected: (val) {
+        setState(() => _filterType = type);
+      },
+      selectedColor: AppColors.accent.withValues(alpha: 0.2),
+      checkmarkColor: AppColors.accentLight,
+      backgroundColor: AppColors.surface,
+      side: BorderSide(
+        color: isSelected ? AppColors.accent : AppColors.surfaceBorder,
+        width: 0.5,
+      ),
+      padding: const EdgeInsets.symmetric(horizontal: 4),
+      materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+      visualDensity: VisualDensity.compact,
+    );
+  }
+
+  Widget _buildReasoningDropdown<T>({
+    required String label,
+    required T value,
+    required List<DropdownMenuItem<T>> items,
+    required ValueChanged<T> onChanged,
+  }) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          label,
+          style: const TextStyle(color: AppColors.textSecondary, fontSize: 12),
+        ),
+        const SizedBox(height: 6),
+        Container(
+          padding: const EdgeInsets.symmetric(horizontal: 12),
+          decoration: BoxDecoration(
+            color: AppColors.surfaceLight,
+            borderRadius: BorderRadius.circular(10),
+            border: Border.all(color: AppColors.surfaceBorder, width: 0.5),
+          ),
+          child: DropdownButtonHideUnderline(
+            child: DropdownButton<T>(
+              value: value,
+              items: items,
+              onChanged: (v) {
+                if (v != null || items.any((i) => i.value == null)) {
+                  onChanged(v as T);
+                }
+              },
+              dropdownColor: AppColors.surfaceLight,
+              isExpanded: true,
+              icon: const Icon(Icons.keyboard_arrow_down_rounded, color: AppColors.textMuted),
+              style: const TextStyle(color: AppColors.textPrimary, fontSize: 14),
+            ),
+          ),
+        ),
+      ],
+    );
   }
 
   @override
@@ -438,6 +519,36 @@ class _SettingsPanelState extends State<SettingsPanel> {
             ],
           ),
           const SizedBox(height: 8),
+
+          // Поле поиска моделей
+          TextField(
+            controller: _searchCtrl,
+            style: const TextStyle(color: AppColors.textPrimary, fontSize: 13),
+            onChanged: (v) => setState(() {}),
+            decoration: InputDecoration(
+              hintText: l10n.get('search_model'),
+              prefixIcon: const Icon(Icons.search_rounded, size: 18),
+              contentPadding: const EdgeInsets.symmetric(vertical: 10),
+              filled: true,
+              fillColor: AppColors.surface,
+            ),
+          ),
+          const SizedBox(height: 10),
+
+          // Фильтры моделей
+          Wrap(
+            spacing: 6,
+            runSpacing: 6,
+            children: [
+              _buildFilterChip(l10n.get('all_models'), 'all', l10n),
+              _buildFilterChip(l10n.get('free_models'), 'free', l10n),
+              _buildFilterChip(l10n.get('paid_models'), 'paid', l10n),
+              _buildFilterChip(l10n.get('reasoning_models'), 'reasoning', l10n),
+              _buildFilterChip(l10n.get('no_reasoning_models'), 'no_reasoning', l10n),
+            ],
+          ),
+          const SizedBox(height: 12),
+
           Container(
             decoration: BoxDecoration(
               color: AppColors.surface,
@@ -470,9 +581,40 @@ class _SettingsPanelState extends State<SettingsPanel> {
                 hintText: l10n.get('select_model'),
                 hintStyle: const TextStyle(color: AppColors.textMuted, fontSize: 14),
               ),
-              items: _models
-                  .map(
-                    (m) => DropdownMenuItem(
+              items: _models.where((m) {
+                // Текущая выбранная модель ВСЕГДА должна быть в списке
+                if (m.id == _modelId) return true;
+
+                // 1. Поиск по тексту
+                final searchText = _searchCtrl.text.toLowerCase();
+                final matchesSearch = searchText.isEmpty ||
+                    m.name.toLowerCase().contains(searchText) ||
+                    m.id.toLowerCase().contains(searchText);
+
+                if (!matchesSearch) return false;
+
+                // 2. Фильтрация по типу
+                switch (_filterType) {
+                  case 'free':
+                    return (m.promptPrice ?? 0) == 0 &&
+                        (m.completionPrice ?? 0) == 0;
+                  case 'paid':
+                    return (m.promptPrice ?? 0) > 0 ||
+                        (m.completionPrice ?? 0) > 0;
+                  case 'reasoning':
+                    return m.reasoning != null ||
+                        m.supportedParameters.contains('include_reasoning');
+                  case 'no_reasoning':
+                    return m.reasoning == null &&
+                        !m.supportedParameters.contains('include_reasoning');
+                  default:
+                    return true;
+                }
+              }).fold<Map<String, AiModel>>({}, (map, m) {
+                // Дедупликация по ID: если ID уже есть, не добавляем
+                if (!map.containsKey(m.id)) map[m.id] = m;
+                return map;
+              }).values.map((m) => DropdownMenuItem(
                       value: m.id,
                       child: Text(m.name, overflow: TextOverflow.ellipsis),
                     ),
@@ -480,9 +622,20 @@ class _SettingsPanelState extends State<SettingsPanel> {
                   .toList(),
               onChanged: (v) {
                 if (v != null) {
-                  setState(() => _modelId = v);
+                  setState(() {
+                    _modelId = v;
+                    final model = _models.firstWhere((m) => m.id == v);
+                    // Если модель сменилась и у нее есть свои дефолты для размышлений
+                    if (model.reasoning != null) {
+                      if (model.reasoning!.defaultEffort != null) {
+                        _reasoningEffort = model.reasoning!.defaultEffort;
+                        widget.settings.setReasoningEffort(_reasoningEffort);
+                      }
+                    }
+                  });
                   widget.onModelChanged(v);
                   widget.settings.setModelId(v);
+                  widget.onSettingsChanged();
                 }
               },
             ),
@@ -616,6 +769,96 @@ class _SettingsPanelState extends State<SettingsPanel> {
                 },
               ),
             ),
+          ),
+          const SizedBox(height: 24),
+
+          // ── Размышления (Reasoning) ──
+          Builder(
+            builder: (context) {
+              final model = _models.cast<AiModel?>().firstWhere(
+                    (m) => m?.id == _modelId,
+                    orElse: () => null,
+                  );
+              final hasReasoning = model?.reasoning != null;
+
+              return Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  SectionHeader(title: l10n.reasoning, icon: Icons.psychology_rounded),
+                  const SizedBox(height: 8),
+                  Container(
+                    padding: const EdgeInsets.all(16),
+                    decoration: BoxDecoration(
+                      color: AppColors.surface,
+                      borderRadius: BorderRadius.circular(14),
+                      border: Border.all(color: AppColors.surfaceBorder, width: 0.5),
+                    ),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        if (hasReasoning) ...[
+                          if (model!.reasoning!.supportedEfforts.isNotEmpty)
+                            _buildReasoningDropdown<String?>(
+                              label: l10n.reasoningEffort,
+                              value: model.reasoning!.supportedEfforts.contains(_reasoningEffort)
+                                  ? _reasoningEffort
+                                  : (model.reasoning!.supportedEfforts.contains(model.reasoning!.defaultEffort)
+                                      ? model.reasoning!.defaultEffort
+                                      : null),
+                              items: [
+                                DropdownMenuItem(value: null, child: Text(l10n.get('auto'))),
+                                ...model.reasoning!.supportedEfforts.map(
+                                  (e) => DropdownMenuItem(value: e, child: Text(l10n.get(e))),
+                                ),
+                              ],
+                              onChanged: (v) {
+                                setState(() => _reasoningEffort = v);
+                                widget.settings.setReasoningEffort(v);
+                                widget.onSettingsChanged();
+                              },
+                            ),
+                          if (model.reasoning!.supportedEfforts.isNotEmpty)
+                            const SizedBox(height: 16),
+                          _buildReasoningDropdown<String?>(
+                            label: l10n.reasoningSummary,
+                            value: _reasoningSummary,
+                            items: [
+                              DropdownMenuItem(value: null, child: Text(l10n.get('none'))),
+                              DropdownMenuItem(value: 'auto', child: Text(l10n.get('auto'))),
+                              DropdownMenuItem(value: 'concise', child: Text(l10n.get('concise'))),
+                              DropdownMenuItem(value: 'detailed', child: Text(l10n.get('detailed'))),
+                            ],
+                            onChanged: (v) {
+                              setState(() => _reasoningSummary = v);
+                              widget.settings.setReasoningSummary(v);
+                              widget.onSettingsChanged();
+                            },
+                          ),
+                        ] else ...[
+                          Row(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              const Icon(Icons.info_outline_rounded, size: 14, color: AppColors.textMuted),
+                              const SizedBox(width: 8),
+                              Expanded(
+                                child: Text(
+                                  l10n.reasoningWarning,
+                                  style: const TextStyle(
+                                    color: AppColors.textMuted,
+                                    fontSize: 11,
+                                    height: 1.3,
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ],
+                      ],
+                    ),
+                  ),
+                ],
+              );
+            },
           ),
           const SizedBox(height: 24),
 
