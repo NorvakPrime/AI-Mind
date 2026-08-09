@@ -13,6 +13,13 @@ class LocaleProvider extends ChangeNotifier {
 
   bool get isFirstRun => !_prefs.containsKey(_kLocaleKey);
 
+  bool get isTutorialComplete => _prefs.getBool('tutorial_complete') ?? false;
+
+  void setTutorialComplete(bool complete) {
+    _prefs.setBool('tutorial_complete', complete);
+    notifyListeners();
+  }
+
   void setLocale(Locale locale) {
     if (_locale == locale) return;
     _locale = locale;

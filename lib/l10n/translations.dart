@@ -81,6 +81,20 @@ class Translations {
       'error_429_title': 'Model is Overloaded',
       'error_429_desc': 'Free models are often under high load and may return errors. Try a different model or switch to a paid one for stable access.',
       'got_it': 'Got it',
+      'skip': 'Skip',
+      'next': 'Next',
+      'back': 'Back',
+      'finish': 'Finish',
+      'login': 'Login',
+      'register': 'Register',
+      'get_key': 'Get API Key',
+      'onboarding_1_title': 'Step 1: Login or Register',
+      'onboarding_1_desc': 'To start using AI Mind, you need an OpenRouter account. Register or log in to their website.',
+      'onboarding_2_title': 'Step 2: Get your API Key',
+      'onboarding_2_desc': 'Create a new API key in your account settings. This key is required for the application to communicate with AI models.',
+      'onboarding_3_title': 'Step 3: Enter your Key',
+      'onboarding_3_desc': 'Paste your API key below or enter it later in the application settings.',
+      'enter_key_hint': 'Paste your sk-or-v1-... key here',
     },
     'ru': {
       'app_title': 'AI Mind',
@@ -154,6 +168,20 @@ class Translations {
       'error_429_title': 'Модель перегружена',
       'error_429_desc': 'Бесплатные модели часто перегружены и могут выдавать ошибки. Попробуйте другую модель или перейдите на платные для стабильной работы.',
       'got_it': 'Понятно',
+      'skip': 'Пропустить',
+      'next': 'Далее',
+      'back': 'Назад',
+      'finish': 'Готово',
+      'login': 'Войти',
+      'register': 'Регистрация',
+      'get_key': 'Получить ключ',
+      'onboarding_1_title': 'Шаг 1: Вход или регистрация',
+      'onboarding_1_desc': 'Для работы с AI Mind вам понадобится аккаунт OpenRouter. Зарегистрируйтесь или войдите в существующий профиль на сайте.',
+      'onboarding_2_title': 'Шаг 2: Получение ключа',
+      'onboarding_2_desc': 'Создайте новый API ключ в настройках вашего аккаунта. Он необходим для того, чтобы приложение могло общаться с нейросетями.',
+      'onboarding_3_title': 'Шаг 3: Ввод ключа',
+      'onboarding_3_desc': 'Вставьте ваш API ключ ниже или введите его позже в настройках приложения.',
+      'enter_key_hint': 'Вставьте ваш ключ sk-or-v1-...',
     },
   };
 
@@ -199,6 +227,13 @@ class Translations {
   String get reasoningEffort => get('reasoning_effort');
   String get reasoningSummary => get('reasoning_summary');
   String get reasoningWarning => get('reasoning_warning');
+  String get skip => get('skip');
+  String get next => get('next');
+  String get back => get('back');
+  String get finish => get('finish');
+  String get login => get('login');
+  String get register => get('register');
+  String get getKey => get('get_key');
 }
 
 class TranslationsDelegate extends LocalizationsDelegate<Translations> {

@@ -4,6 +4,7 @@ import 'package:provider/provider.dart';
 import '../services/locale_service.dart';
 import '../theme/app_colors.dart';
 import 'chat_page.dart';
+import 'onboarding_page.dart';
 
 class LanguageSelectionPage extends StatelessWidget {
   const LanguageSelectionPage({super.key});
@@ -61,7 +62,7 @@ class LanguageSelectionPage extends StatelessWidget {
   void _select(BuildContext context, String code) {
     context.read<LocaleProvider>().setLocale(Locale(code));
     Navigator.of(context).pushReplacement(
-      MaterialPageRoute(builder: (_) => const ChatPage()),
+      MaterialPageRoute(builder: (_) => const OnboardingPage()),
     );
   }
 }

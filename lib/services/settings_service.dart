@@ -19,6 +19,7 @@ class SettingsService {
   static const _kLanguageDefault = 'language_default';
   static const _kReasoningEffort = 'reasoning_effort';
   static const _kReasoningSummary = 'reasoning_summary';
+  static const _kTutorialComplete = 'tutorial_complete';
 
   final SharedPreferences _prefs;
   SettingsService(this._prefs);
@@ -111,6 +112,11 @@ class SettingsService {
   Future<void> setReasoningSummary(String? v) => v == null
       ? _prefs.remove(_kReasoningSummary)
       : _prefs.setString(_kReasoningSummary, v);
+
+  // ── Tutorial ──
+  bool get isTutorialComplete => _prefs.getBool(_kTutorialComplete) ?? false;
+  Future<void> setTutorialComplete(bool v) =>
+      _prefs.setBool(_kTutorialComplete, v);
 
   // ── Сброс ──
   Future<void> clear() async {

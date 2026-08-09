@@ -7,6 +7,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'l10n/translations.dart';
 import 'pages/chat_page.dart';
 import 'pages/language_selection_page.dart';
+import 'pages/onboarding_page.dart';
 import 'services/locale_service.dart';
 import 'theme/app_colors.dart';
 
@@ -112,7 +113,12 @@ class AiMindApp extends StatelessWidget {
       ),
       home: localeProvider.isFirstRun
           ? const LanguageSelectionPage()
-          : const ChatPage(),
+          : Stack(
+              children: [
+                const ChatPage(),
+                if (!localeProvider.isTutorialComplete) const OnboardingPage(),
+              ],
+            ),
     );
   }
 }
