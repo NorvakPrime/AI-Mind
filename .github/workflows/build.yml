@@ -1,90 +1,160 @@
+name: Multi-Platform Build
 
-  name: Multi-Platform Build
+on:
+  push:
+    branches: [ master ]
+  workflow_dispatch:
 
-  on:
-    push:
-      branches: [ master ]
-    workflow_dispatch:
+jobs:
+  # --- Сборка для Android (APK) ---
+  build-android:
+    runs-on: ubuntu-latest
 
-  jobs:
-    # --- Сборка для Android (APK) ---
-    build-android:
-      runs-on: ubuntu-latest
-      steps:
-        - uses: actions/checkout@v4
+    steps:
+      - uses: actions/checkout@v4
 
-        - uses: actions/setup-java@v4
-          with:
-            distribution: 'zulu'
-            java-version: '17'
+      - uses: actions/setup-java@v4
+        with:
+          distribution: 'zulu'
+          java-version: '17'
 
-        - uses: subosito/flutter-action@v2
-          with:
-            channel: 'stable'
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: 'stable'
 
-        - run: flutter pub get
-        - run: flutter build apk --release
+      - name: Get Flutter dependencies
+        run: flutter pub get
 
-        - name: Upload APK
-          uses: actions/upload-artifact@v4
-          with:
-            name: ai-mind-android-apk
-            path: build/app/outputs/flutter-apk/app-release.apk
+      - name: Build Android APK
+        run: flutter build apk --release
 
-
-    # --- Сборка для Linux ---
-    build-linux:
-      runs-on: ubuntu-22.04
-
-      steps:
-        - uses: actions/checkout@v4
-
-        - name: Install Linux dependencies
-          run: |
-            sudo apt-get update
-            sudo apt-get install -y \
-              ninja-build \
-              cmake \
-              pkg-config \
-              libgtk-3-dev \
-              liblzma-dev \
-              libstdc++-12-dev \
-              libsecret-1-dev \
-              libwpe-1.0-dev \
-              libwpebackend-fdo-1.0-dev \
-              libwpewebkit-1.0-dev
-
-        - uses: subosito/flutter-action@v2
-          with:
-            channel: 'stable'
-
-        - run: flutter pub get
-
-        - run: flutter build linux --release
-
-        - name: Upload Linux Build
-          uses: actions/upload-artifact@v4
-          with:
-            name: ai-mind-linux
-            path: build/linux/x64/release/bundle/
+      - name: Upload APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: ai-mind-android-apk
+          path: build/app/outputs/flutter-apk/app-release.apk
 
 
-    # --- Сборка для Windows (EXE) ---
-    build-windows:
-      runs-on: windows-latest
+  # --- Сборка для Linux ---
+  build-linux:
+    runs-on: ubuntu-24.04
 
-      steps:
-        - uses: actions/checkout@v4
+    steps:
+      - uses: actions/checkout@v4
 
-        - uses: subosito/flutter-action@v2
-          with:
-            channel: 'stable'
+      - name: Install Linux dependencies
+        run: |
+          sudo apt-get update
+          
+          sudo apt-get install -y \
+            build-essential \
+            cmake \
+            ninja-build \
+            pkg-config \
+            libgtk-3-dev \
+            liblzma-dev \
+            libstdc++-12-dev \
+            libsecret-1-dev \
+            libasound2-dev \
+            libasound2-data \
+            alsa-topology-conf \
+            alsa-ucm-conf \
+            libwpe-1.0-dev \
+            libwpebackend-fdo-1.0-dev \
+            libwpewebkit-2.0-dev \
+            libwebkit2gtk-4.1-dev \
+            libepoxy-dev \
+            libgstreamer1.0-dev \
+            gstreamer1.0-plugins-base \
+            gstreamer1.0-plugins-good
 
-        - run: flutter pub get
-        - run: flutter build windows --release
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: 'stable'
 
-        - name: Upload Windows Build
-          uses: actions/upload-artifact@v4
-          with:
-            name: ai-mind-windows
-            path: build/windows/x64/runner/Release/
+      - name: Get Flutter dependencies
+        run: flutter pub get
+
+      - name: Build Linux
+        run: flutter build linux --release
+
+      - name: Check Linux bundle
+        run: |
+          echo "=== Linux bundle ==="
+          find build/linux/x64/release/bundle -maxdepth 2 -type f | sort
+          
+          echo ""
+          echo "=== WPE libraries ==="
+          find build/linux/x64/release/bundle \
+            \( -iname '*WPE*' -o -iname '*wpe*' \) \
+            -type f \
+            -print
+
+      - name: Upload Linux Build
+        uses: actions/upload-artifact@v4
+        with:
+          name: ai-mind-linux
+          path: build/linux/x64/release/bundle/
+
+
+  # --- Сборка для Windows (EXE) ---
+  build-windows:
+    runs-on: windows-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: 'stable'
+
+      - name: Get Flutter dependencies
+        run: flutter pub get
+
+      # ═══════════════════════════════════════════════════════
+      # ПАТЧ: Подавление ошибки STL1011 в MSVC 14.51+
+      # Проблема: flutter_inappwebview_windows использует
+      # устаревшие <experimental/coroutine>, заблокированные
+      # в Visual Studio 2026. См. issue:
+      # https://github.com/pichillilorenzo/flutter_inappwebview/issues/2839
+      # ═══════════════════════════════════════════════════════
+      - name: Patch flutter_inappwebview_windows for MSVC 14.51
+        shell: pwsh
+        run: |
+          $pluginDir = "windows/flutter/ephemeral/.plugin_symlinks/flutter_inappwebview_windows/windows"
+          $cmakeFile = "$pluginDir/CMakeLists.txt"
+          
+          if (-not (Test-Path $cmakeFile)) {
+            # Плагин может быть не в .plugin_symlinks, ищем в pub cache
+            $pubCache = & flutter pub cache list 2>$null | Select-String "flutter_inappwebview_windows" | Select-Object -First 1
+            if ($pubCache) {
+              $cachePath = ($pubCache -split " ")[-1]
+              $cmakeFile = "$cachePath/windows/CMakeLists.txt"
+            }
+          }
+          
+          if (Test-Path $cmakeFile) {
+            $content = Get-Content $cmakeFile -Raw
+            if ($content -notmatch "_SILENCE_EXPERIMENTAL_COROUTINE_DEPRECATION_WARNINGS") {
+              $newContent = "add_compile_definitions(_SILENCE_EXPERIMENTAL_COROUTINE_DEPRECATION_WARNINGS)`n`n" + $content
+              Set-Content $cmakeFile $newContent -NoNewline
+              Write-Host "✅ Patched: $cmakeFile"
+            } else {
+              Write-Host "ℹ️ Already patched, skipping"
+            }
+          } else {
+            Write-Error "❌ CMakeLists.txt for flutter_inappwebview_windows not found"
+            exit 1
+          }
+
+      - name: Build Windows
+        shell: pwsh
+        run: |
+          $env:CXXFLAGS = "/D_SILENCE_EXPERIMENTAL_COROUTINE_DEPRECATION_WARNINGS"
+          flutter build windows --release
+
+      - name: Upload Windows Build
+        uses: actions/upload-artifact@v4
+        with:
+          name: ai-mind-windows
+          path: build/windows/x64/runner/Release/
