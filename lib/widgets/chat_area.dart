@@ -1,5 +1,12 @@
+import 'dart:async';
+import 'dart:convert';
+import 'dart:io';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_markdown/flutter_markdown.dart';
+import 'package:media_kit/media_kit.dart';
+import 'package:media_kit_video/media_kit_video.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 import '../l10n/translations.dart';
 import '../models/message.dart';
@@ -184,7 +191,7 @@ class MessageBubble extends StatelessWidget {
                   children: [
                     if (thought != null && thought.isNotEmpty)
                       _ThoughtBlock(thought: thought),
-                    if (content.isNotEmpty || isUser)
+                    if (content.isNotEmpty || isUser || message.mediaPath != null)
                       Container(
                         constraints: const BoxConstraints(maxWidth: 560),
                         padding: const EdgeInsets.symmetric(
@@ -208,50 +215,82 @@ class MessageBubble extends StatelessWidget {
                             width: 0.5,
                           ),
                         ),
-                        child: MarkdownBody(
-                          data: content,
-                          selectable: true,
-                          styleSheet: MarkdownStyleSheet(
-                            p: TextStyle(
-                              fontSize: 14.5,
-                              height: 1.55,
-                              color: isUser
-                                  ? AppColors.textPrimary
-                                  : AppColors.textPrimary.withValues(alpha: 0.9),
-                            ),
-                            em: TextStyle(
-                              fontStyle: FontStyle.italic,
-                              color: isUser
-                                  ? const Color(0xFFADFFD1)
-                                  : AppColors.accentLight,
-                              letterSpacing: 0.2,
-                            ),
-                            code: const TextStyle(
-                              backgroundColor: AppColors.bg,
-                              color: AppColors.accentLight,
-                              fontFamily: 'monospace',
-                              fontSize: 13,
-                            ),
-                            codeblockDecoration: BoxDecoration(
-                              color: AppColors.bg,
-                              borderRadius: BorderRadius.circular(8),
-                              border: Border.all(
-                                color: AppColors.surfaceBorder,
-                                width: 0.5,
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            if (message.mediaPath != null)
+                              Padding(
+                                padding: const EdgeInsets.only(bottom: 8.0),
+                                child: _MediaDisplay(
+                                  path: message.mediaPath!,
+                                  type: message.mediaType ?? 'image',
+                                ),
                               ),
-                            ),
-                            blockquote: const TextStyle(
-                              color: AppColors.textSecondary,
-                              fontStyle: FontStyle.italic,
-                            ),
-                            blockquoteDecoration: const BoxDecoration(
-                              border: Border(
-                                left:
-                                    BorderSide(color: AppColors.accent, width: 3),
+                            if (content.isNotEmpty)
+                              MarkdownBody(
+                                data: content,
+                                selectable: true,
+                                onTapLink: (text, href, title) {
+                                  if (href != null) {
+                                    final uri = Uri.tryParse(href);
+                                    if (uri != null) {
+                                      launchUrl(uri, mode: LaunchMode.externalApplication);
+                                    }
+                                  }
+                                },
+                                styleSheet: MarkdownStyleSheet(
+                                  p: TextStyle(
+                                    fontSize: 14.5,
+                                    height: 1.55,
+                                    color: isUser
+                                        ? AppColors.textPrimary
+                                        : AppColors.textPrimary.withValues(alpha: 0.9),
+                                  ),
+                                  em: TextStyle(
+                                    fontStyle: FontStyle.italic,
+                                    color: isUser
+                                        ? const Color(0xFFADFFD1)
+                                        : AppColors.accentLight,
+                                    letterSpacing: 0.2,
+                                  ),
+                                  code: const TextStyle(
+                                    backgroundColor: AppColors.bg,
+                                    color: AppColors.accentLight,
+                                    fontFamily: 'monospace',
+                                    fontSize: 13,
+                                  ),
+                                  codeblockDecoration: BoxDecoration(
+                                    color: AppColors.bg,
+                                    borderRadius: BorderRadius.circular(8),
+                                    border: Border.all(
+                                      color: AppColors.surfaceBorder,
+                                      width: 0.5,
+                                    ),
+                                  ),
+                                  blockquote: const TextStyle(
+                                    color: AppColors.textSecondary,
+                                    fontStyle: FontStyle.italic,
+                                  ),
+                                  blockquoteDecoration: const BoxDecoration(
+                                    border: Border(
+                                      left:
+                                          BorderSide(color: AppColors.accent, width: 3),
+                                    ),
+                                  ),
+                                ),
                               ),
-                            ),
-                          ),
+                          ],
                         ),
+                      ),
+                    // Tool calls
+                    if (message.toolCallId != null && message.toolCallName != null)
+                      _ToolCallBlock(
+                        callId: message.toolCallId!,
+                        callName: message.toolCallName!,
+                        callArgs: message.toolCallArgs,
+                        result: message.toolResult,
+                        progress: message.toolCallProgress?[message.toolCallId],
                       ),
                   ],
                 ),
@@ -632,6 +671,422 @@ class _InputBarState extends State<InputBar> {
           ),
         ],
       ),
+    );
+  }
+}
+
+// ───────────────────────── Блок вызова функции ─────────────────────────
+
+class _ToolCallBlock extends StatefulWidget {
+  const _ToolCallBlock({
+    required this.callId,
+    required this.callName,
+    this.callArgs,
+    this.result,
+    this.progress,
+    this.startTime,
+  });
+
+  final String callId;
+  final String callName;
+  final String? callArgs;
+  final String? result;
+  final double? progress;
+  final DateTime? startTime;
+
+  @override
+  State<_ToolCallBlock> createState() => _ToolCallBlockState();
+}
+
+class _ToolCallBlockState extends State<_ToolCallBlock> {
+  bool _isExpanded = false;
+  Timer? _etaTimer;
+  double? _etaSeconds;
+
+  @override
+  void initState() {
+    super.initState();
+    if (widget.startTime != null) {
+      _startEtaTimer();
+    }
+  }
+
+  @override
+  void didUpdateWidget(_ToolCallBlock oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (widget.startTime != null && _etaTimer == null) {
+      _startEtaTimer();
+    }
+  }
+
+  void _startEtaTimer() {
+    _etaTimer?.cancel();
+    _etaTimer = Timer.periodic(const Duration(seconds: 1), (_) {
+      if (mounted && widget.progress != null && widget.progress! > 0 && widget.progress! < 1.0 && widget.startTime != null) {
+        final elapsed = DateTime.now().difference(widget.startTime!).inSeconds;
+        if (elapsed > 2) { // Wait for a few seconds to get stable ETA
+          final totalSeconds = (elapsed / widget.progress!).round();
+          final remaining = totalSeconds - elapsed;
+          setState(() => _etaSeconds = remaining.toDouble());
+        }
+      } else if (widget.progress == 1.0) {
+        _etaTimer?.cancel();
+        _etaTimer = null;
+      }
+    });
+  }
+
+  @override
+  void dispose() {
+    _etaTimer?.cancel();
+    super.dispose();
+  }
+
+  String _formatEta(double? seconds) {
+    if (seconds == null || seconds.isNegative || !seconds.isFinite) return '...';
+    if (seconds < 60) return '${seconds.round()}s';
+    final minutes = (seconds / 60).floor();
+    final remainingSeconds = (seconds % 60).round();
+    return '${minutes}m ${remainingSeconds}s';
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final l10n = Translations.of(context);
+    final isDownloading = widget.callName.contains('download');
+    final isComplete = widget.progress == 1.0 || widget.result != null;
+    bool isError = false;
+    if (widget.result != null) {
+      try {
+        final res = jsonDecode(widget.result!);
+        // Ошибка, только если поле error существует и не равно null
+        isError = res is Map && res['error'] != null;
+      } catch (_) {
+        // Резервный вариант на случай невалидного JSON
+        isError = widget.result!.contains('"error":');
+      }
+    }
+    final isRunning = !isComplete;
+
+
+
+    return Container(
+      margin: const EdgeInsets.only(top: 8),
+      decoration: BoxDecoration(
+        color: AppColors.surface.withValues(alpha: 0.3),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(
+          color: isError ? Colors.red.withValues(alpha: 0.3) : AppColors.surfaceBorder,
+          width: 0.5,
+        ),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          InkWell(
+            onTap: () => setState(() => _isExpanded = !_isExpanded),
+            borderRadius: BorderRadius.circular(12),
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+              child: Row(
+                children: [
+                  Icon(
+                    isDownloading ? Icons.download_rounded : Icons.terminal_rounded,
+                    size: 16,
+                    color: isError ? Colors.red : (isComplete ? Colors.green : AppColors.accent),
+                  ),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          '${l10n.get('tool_call')}: ${widget.callName}',
+                          style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: AppColors.textPrimary),
+                        ),
+                        if (isRunning)
+                          Text(
+                            widget.progress != null 
+                                ? '${(widget.progress! * 100).toInt()}% • ETA: ${_formatEta(_etaSeconds)}'
+                                : l10n.get('tool_call_running'),
+                            style: const TextStyle(fontSize: 10, color: AppColors.textMuted),
+                          )
+                        else if (isComplete)
+                          Text(
+                            l10n.get('tool_call_completed'),
+                            style: const TextStyle(fontSize: 10, color: Colors.green),
+                          ),
+                      ],
+                    ),
+                  ),
+                  if (isRunning)
+                    const SizedBox(
+                      width: 12,
+                      height: 12,
+                      child: CircularProgressIndicator(strokeWidth: 2, color: AppColors.accent),
+                    )
+                  else if (isComplete)
+                    Icon(isError ? Icons.error_outline : Icons.check_circle_outline, size: 16, color: isError ? Colors.red : Colors.green),
+                  const SizedBox(width: 8),
+                  Icon(_isExpanded ? Icons.expand_less : Icons.expand_more, size: 16, color: AppColors.textMuted),
+                ],
+              ),
+            ),
+          ),
+          if (isRunning && widget.progress != null && widget.progress! > 0)
+            Padding(
+              padding: const EdgeInsets.fromLTRB(12, 0, 12, 8),
+              child: LinearProgressIndicator(
+                value: widget.progress,
+                backgroundColor: AppColors.surface,
+                color: AppColors.accent,
+                minHeight: 2,
+              ),
+            ),
+          AnimatedSize(
+            duration: const Duration(milliseconds: 300),
+            curve: Curves.easeInOut,
+            alignment: Alignment.topCenter,
+            child: _isExpanded
+                ? Padding(
+                    padding: const EdgeInsets.fromLTRB(12, 0, 12, 12),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        const Divider(height: 12, color: AppColors.surfaceBorder),
+                        if (widget.callArgs != null) ...[
+                          Text(l10n.get('tool_call_params'), style: const TextStyle(fontSize: 10, color: AppColors.textMuted, fontWeight: FontWeight.bold)),
+                          const SizedBox(height: 4),
+                          Text(widget.callArgs!, style: const TextStyle(fontSize: 11, fontFamily: 'monospace', color: AppColors.textSecondary)),
+                        ],
+                        if (widget.result != null) ...[
+                          const SizedBox(height: 8),
+                          Text(l10n.get('tool_call_result'), style: const TextStyle(fontSize: 10, color: AppColors.textMuted, fontWeight: FontWeight.bold)),
+                          const SizedBox(height: 4),
+                          Text(
+                            widget.result!,
+                            style: TextStyle(fontSize: 11, fontFamily: 'monospace', color: isError ? Colors.redAccent : Colors.greenAccent),
+                          ),
+                        ],
+                      ],
+                    ),
+                  )
+                : const SizedBox(width: double.infinity, height: 0),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+// ──────────────────────── Отображение Медиа ─────────────────────────
+
+class _MediaDisplay extends StatelessWidget {
+  const _MediaDisplay({required this.path, required this.type});
+  final String path;
+  final String type;
+
+  @override
+  Widget build(BuildContext context) {
+    final file = File(path);
+    if (!file.existsSync()) {
+      return Container(
+        padding: const EdgeInsets.all(12),
+        decoration: BoxDecoration(color: Colors.red.withValues(alpha: 0.1), borderRadius: BorderRadius.circular(12)),
+        child: const Row(children: [Icon(Icons.error_outline, color: Colors.red), SizedBox(width: 8), Text('File not found', style: TextStyle(color: Colors.red))]),
+      );
+    }
+
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(12),
+      child: type == 'video' ? _VideoPlayerWidget(path: path) : Image.file(file, fit: BoxFit.cover, errorBuilder: (_, __, ___) => const Icon(Icons.broken_image, size: 48)),
+    );
+  }
+}
+
+class _VideoPlayerWidget extends StatefulWidget {
+  const _VideoPlayerWidget({required this.path});
+  final String path;
+
+  @override
+  State<_VideoPlayerWidget> createState() => _VideoPlayerWidgetState();
+}
+
+class _VideoPlayerWidgetState extends State<_VideoPlayerWidget> with AutomaticKeepAliveClientMixin {
+  late final Player player = Player();
+  late final VideoController controller = VideoController(
+    player,
+    configuration: const VideoControllerConfiguration(
+      enableHardwareAcceleration: false, // <-- Force software rendering in Flutter texture
+    ),
+  );
+
+  @override
+  bool get wantKeepAlive => true;
+
+  @override
+  void initState() {
+    super.initState();
+    _setupPlayer();
+  }
+
+  Future<void> _setupPlayer() async {
+    // Disable hardware acceleration as requested to avoid driver issues (like libcuda errors)
+    try {
+      if (player.platform is NativePlayer) {
+        final native = player.platform as NativePlayer;
+        // 'no' = полностью программное декодирование (CPU), никакого CUDA/NVDEC/VAAPI
+        await native.setProperty('hwdec', 'no');
+      }
+    } catch (e) {
+      debugPrint('Error setting player properties: $e');
+    }
+
+    await player.open(Media(widget.path), play: false);
+    if (mounted) setState(() {});
+  }
+
+  @override
+  void dispose() {
+    player.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    super.build(context); // Required for AutomaticKeepAliveClientMixin
+    return Container(
+      height: 250,
+      width: double.infinity,
+      color: Colors.black,
+      child: Stack(
+        alignment: Alignment.center,
+        children: [
+          Video(controller: controller),
+          _VideoControls(player: player, path: widget.path),
+        ],
+      ),
+    );
+  }
+}
+
+class _VideoControls extends StatefulWidget {
+  const _VideoControls({required this.player, required this.path});
+  final Player player;
+  final String path;
+
+  @override
+  State<_VideoControls> createState() => _VideoControlsState();
+}
+
+class _VideoControlsState extends State<_VideoControls> {
+  bool _playing = false;
+  bool _showControls = true;
+  Timer? _hideTimer;
+
+  @override
+  void initState() {
+    super.initState();
+    widget.player.stream.playing.listen((p) {
+      if (mounted) setState(() => _playing = p);
+    });
+  }
+
+  void _togglePlay() {
+    widget.player.playOrPause();
+    _resetHideTimer();
+  }
+
+  void _resetHideTimer() {
+    setState(() => _showControls = true);
+    _hideTimer?.cancel();
+    _hideTimer = Timer(const Duration(seconds: 3), () {
+      if (mounted) setState(() => _showControls = false);
+    });
+  }
+
+  Future<void> _openExternal() async {
+    final uri = Uri.file(widget.path);
+    if (!await launchUrl(uri)) {
+      debugPrint('Could not launch ${widget.path}');
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: _resetHideTimer,
+      behavior: HitTestBehavior.translucent,
+      child: AnimatedOpacity(
+        opacity: _showControls ? 1.0 : 0.0,
+        duration: const Duration(milliseconds: 300),
+        child: Container(
+          color: Colors.black26,
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Align(
+                alignment: Alignment.topRight,
+                child: IconButton(
+                  icon: const Icon(Icons.open_in_new_rounded, color: Colors.white, size: 20),
+                  onPressed: _openExternal,
+                  tooltip: 'Open in system player',
+                ),
+              ),
+              IconButton(
+                iconSize: 48,
+                icon: Icon(
+                  _playing ? Icons.pause_circle_filled : Icons.play_circle_fill,
+                  color: Colors.white,
+                ),
+                onPressed: _togglePlay,
+              ),
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                child: Row(
+                  children: [
+                    Expanded(
+                      child: Text(
+                        widget.path.split('/').last,
+                        style: const TextStyle(color: Colors.white70, fontSize: 11),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _InfoSection extends StatelessWidget {
+  const _InfoSection({required this.title, required this.children});
+
+  final String title;
+  final List<Widget> children;
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          title,
+          style: const TextStyle(
+            color: AppColors.textMuted,
+            fontSize: 10,
+            fontWeight: FontWeight.w600,
+            letterSpacing: 0.5,
+          ),
+        ),
+        const SizedBox(height: 4),
+        ...children,
+      ],
     );
   }
 }

@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../l10n/translations.dart';
 import '../models/ai_model.dart';
 import '../services/settings_service.dart';
+import '../services/youtube_cookie_service.dart';
 import '../theme/app_colors.dart';
 import '../widgets/settings_panel.dart';
 
@@ -19,6 +20,10 @@ class SettingsPage extends StatelessWidget {
     required this.streaming,
     this.reasoningEffort,
     this.reasoningSummary,
+    required this.enabledTools,
+    this.workingDirectory,
+    required this.youtubeEnabled,
+    this.youtubeCookieService,
     required this.onModelChanged,
     required this.onModelsUpdated,
     required this.onSettingsChanged,
@@ -34,6 +39,10 @@ class SettingsPage extends StatelessWidget {
   final bool streaming;
   final String? reasoningEffort;
   final String? reasoningSummary;
+  final List<String> enabledTools;
+  final String? workingDirectory;
+  final bool youtubeEnabled;
+  final YouTubeCookieService? youtubeCookieService;
   final ValueChanged<String> onModelChanged;
   final ValueChanged<List<AiModel>> onModelsUpdated;
   final VoidCallback onSettingsChanged;
@@ -73,6 +82,10 @@ class SettingsPage extends StatelessWidget {
           streaming: streaming,
           reasoningEffort: reasoningEffort,
           reasoningSummary: reasoningSummary,
+          enabledTools: enabledTools,
+          workingDirectory: workingDirectory,
+          youtubeEnabled: youtubeEnabled,
+          youtubeCookieService: youtubeCookieService,
           onModelChanged: onModelChanged,
           onModelsUpdated: onModelsUpdated,
           onSettingsChanged: onSettingsChanged,

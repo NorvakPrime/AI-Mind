@@ -20,6 +20,9 @@ class SettingsService {
   static const _kReasoningEffort = 'reasoning_effort';
   static const _kReasoningSummary = 'reasoning_summary';
   static const _kTutorialComplete = 'tutorial_complete';
+  static const _kEnabledTools = 'enabled_tools';
+  static const _kWorkingDirectory = 'working_directory';
+  static const _kYoutubeEnabled = 'youtube_enabled';
 
   final SharedPreferences _prefs;
   SettingsService(this._prefs);
@@ -117,6 +120,20 @@ class SettingsService {
   bool get isTutorialComplete => _prefs.getBool(_kTutorialComplete) ?? false;
   Future<void> setTutorialComplete(bool v) =>
       _prefs.setBool(_kTutorialComplete, v);
+
+  // ── Tools ──
+  List<String> get enabledTools => _prefs.getStringList(_kEnabledTools) ?? [];
+  Future<void> setEnabledTools(List<String> v) => _prefs.setStringList(_kEnabledTools, v);
+
+  String? get workingDirectory => _prefs.getString(_kWorkingDirectory);
+  Future<void> setWorkingDirectory(String? v) => v == null
+      ? _prefs.remove(_kWorkingDirectory)
+      : _prefs.setString(_kWorkingDirectory, v);
+
+  // ── YouTube ──
+  bool get youtubeEnabled => _prefs.getBool(_kYoutubeEnabled) ?? false;
+  Future<void> setYoutubeEnabled(bool v) => _prefs.setBool(_kYoutubeEnabled, v);
+
 
   // ── Сброс ──
   Future<void> clear() async {

@@ -12,6 +12,8 @@ import '../services/open_router_service.dart';
 import '../services/settings_service.dart';
 import '../theme/app_colors.dart';
 
+import '../pages/chat_page.dart';
+
 class OnboardingPage extends StatefulWidget {
   const OnboardingPage({super.key});
 
@@ -43,8 +45,14 @@ class _OnboardingPageState extends State<OnboardingPage> {
       await settings.setApiToken(_tokenController.text.trim());
     }
 
+    // Mark tutorial as complete in BOTH services to be safe
+    await settings.setTutorialComplete(true);
+
     if (mounted) {
       context.read<LocaleProvider>().setTutorialComplete(true);
+      Navigator.of(context).pushReplacement(
+        MaterialPageRoute(builder: (_) => const ChatPage()),
+      );
     }
   }
 

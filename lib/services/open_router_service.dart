@@ -4,6 +4,7 @@ import 'dart:convert';
 import 'package:http/http.dart' as http;
 
 import '../models/ai_model.dart';
+import '../models/chat_chunk.dart';
 import '../models/message.dart';
 import '../utils/logger.dart';
 
@@ -12,28 +13,42 @@ class OpenRouterService {
   final http.Client _client;
   static const _baseUrl = 'https://openrouter.ai/api/v1';
 
-  List<Map<String, String>> _buildMessagesJson(
+  List<Map<String, dynamic>> _buildMessagesJson(
     List<Message> messages,
     String? systemPrompt,
   ) {
-    final List<Map<String, String>> result = [];
+    final List<Map<String, dynamic>> result = [];
     if (systemPrompt != null && systemPrompt.trim().isNotEmpty) {
       result.add({'role': 'system', 'content': systemPrompt});
     }
     for (final msg in messages) {
+      if (msg.toolResult != null) {
+        result.add({
+          'role': 'tool',
+          'content': msg.toolResult,
+          'tool_call_id': msg.toolCallId,
+        });
+        continue;
+      }
+
       // Игнорируем мысли (thought), отправляем только основной текст.
-      // Дополнительно очищаем текст от тегов <think>, если они там вдруг остались.
       String cleanText = msg.text
           .replaceAll(RegExp(r'<think>.*?</think>', dotAll: true), '')
           .replaceAll(RegExp(r'<think>.*$', dotAll: true), '')
           .trim();
 
-      if (cleanText.isEmpty && !msg.fromUser) continue;
+      if (cleanText.isEmpty && !msg.fromUser && msg.toolCalls == null) continue;
 
-      result.add({
+      final Map<String, dynamic> map = {
         'role': msg.fromUser ? 'user' : 'assistant',
         'content': cleanText,
-      });
+      };
+
+      if (msg.toolCalls != null) {
+        map['tool_calls'] = msg.toolCalls;
+      }
+
+      result.add(map);
     }
     return result;
   }
@@ -65,13 +80,14 @@ class OpenRouterService {
   }
 
   /// Отправить сообщение (обычный, без стриминга)
-  Future<String> sendMessage({
+  Future<Message> sendMessage({
     required String apiKey,
     required String modelId,
     required List<Message> history,
     String? systemPrompt,
     Map<String, dynamic>? reasoning,
     bool includeReasoning = false,
+    List<Map<String, dynamic>>? tools,
   }) async {
     final url = '$_baseUrl/chat/completions';
     final body = {
@@ -79,6 +95,7 @@ class OpenRouterService {
       'messages': _buildMessagesJson(history, systemPrompt),
       if (reasoning != null) 'reasoning': reasoning,
       if (includeReasoning) 'include_reasoning': true,
+      if (tools != null && tools.isNotEmpty) 'tools': tools,
     };
 
     AppLogger.request(url, body);
@@ -105,28 +122,45 @@ class OpenRouterService {
     final choices = data['choices'] as List<dynamic>? ?? [];
     if (choices.isEmpty) throw Exception('Пустой ответ от модели.');
 
-    final message =
+    final messageMap =
         (choices.first as Map<String, dynamic>)['message']
             as Map<String, dynamic>;
 
-    final content = message['content'] as String?;
-    final reasoningText = _extractReasoning(message);
+    final content = messageMap['content'] as String? ?? "";
+    final toolCalls = messageMap['tool_calls'] as List<dynamic>?;
+    
+    // Пытаемся извлечь мысли из спец. полей
+    String? reasoningText = _extractReasoning(messageMap);
+    String finalContent = content;
 
-    if (reasoningText != null && reasoningText.trim().isNotEmpty) {
-      return '<think>\n${reasoningText.trim()}\n</think>\n\n${content?.trim() ?? ''}';
+    // Если в спец. полях пусто, пробуем вытащить из текста
+    if (reasoningText == null || reasoningText.isEmpty) {
+      final thinkRegex = RegExp(r'<think>(.*?)(?:</think>|$)', dotAll: true);
+      final match = thinkRegex.firstMatch(content);
+      if (match != null) {
+        reasoningText = match.group(1)?.trim();
+        finalContent = content.replaceFirst(thinkRegex, '').trim();
+      }
     }
 
-    return content?.trim() ?? '';
+    return Message(
+      finalContent,
+      fromUser: false,
+      timestamp: DateTime.now(),
+      thought: reasoningText,
+      toolCalls: toolCalls,
+    );
   }
 
   /// Отправить сообщение с SSE-стримингом
-  Stream<String> sendMessageStream({
+  Stream<ChatChunk> sendMessageStream({
     required String apiKey,
     required String modelId,
     required List<Message> history,
     String? systemPrompt,
     Map<String, dynamic>? reasoning,
     bool includeReasoning = false,
+    List<Map<String, dynamic>>? tools,
   }) async* {
     final url = '$_baseUrl/chat/completions';
     final body = {
@@ -135,6 +169,7 @@ class OpenRouterService {
       'stream': true,
       if (reasoning != null) 'reasoning': reasoning,
       if (includeReasoning) 'include_reasoning': true,
+      if (tools != null && tools.isNotEmpty) 'tools': tools,
     };
 
     AppLogger.request('$url (STREAM)', body);
@@ -168,11 +203,11 @@ class OpenRouterService {
         if (line.startsWith('data: ')) {
           final data = line.substring(6);
           if (data == '[DONE]') {
-            if (hasReasoning) yield '\n</think>\n';
+            if (hasReasoning) yield ChatChunk(content: '\n</think>\n');
             return;
           }
           try {
-            AppLogger.log('Raw SSE Data: $data', tag: 'SSE_RAW');
+
             final json = jsonDecode(data) as Map<String, dynamic>;
             final choices = json['choices'] as List<dynamic>? ?? [];
             if (choices.isEmpty) continue;
@@ -184,23 +219,24 @@ class OpenRouterService {
 
             final rContent = _extractReasoning(delta);
             final content = delta['content'] as String?;
+            final toolCalls = delta['tool_calls'] as List<dynamic>?;
+
+            if (toolCalls != null) {
+              yield ChatChunk(toolCalls: toolCalls);
+            }
 
             if (rContent != null && rContent.isNotEmpty) {
               if (!hasReasoning) {
                 hasReasoning = true;
-                AppLogger.log('Reasoning started...', tag: 'STREAM');
-                yield '<think>\n';
+                yield ChatChunk(content: '<think>\n');
               }
-              AppLogger.log('Reasoning chunk: $rContent', tag: 'STREAM');
-              yield rContent;
+              yield ChatChunk(reasoning: rContent);
             } else if (content != null && content.isNotEmpty) {
               if (hasReasoning) {
                 hasReasoning = false;
-                AppLogger.log('Reasoning ended.', tag: 'STREAM');
-                yield '\n</think>\n\n';
+                yield ChatChunk(content: '\n</think>\n\n');
               }
-              AppLogger.log('Content chunk: $content', tag: 'STREAM');
-              yield content;
+              yield ChatChunk(content: content);
             }
           } catch (_) {}
         }

@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:convert';
 
 import 'package:flutter/material.dart';
 import 'package:language_picker/languages.dart';
@@ -6,12 +7,15 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import '../l10n/translations.dart';
 import '../models/ai_model.dart';
+import '../models/chat_chunk.dart';
 import '../models/chat_session.dart';
 import '../models/message.dart';
 import '../pages/chat_history_page.dart';
 import '../pages/settings_page.dart';
 import '../services/open_router_service.dart';
 import '../services/settings_service.dart';
+import '../services/tool_service.dart';
+import '../services/youtube_cookie_service.dart';
 import '../theme/app_colors.dart';
 import '../utils/animations.dart';
 import '../widgets/chat_area.dart';
@@ -48,6 +52,7 @@ class _ChatPageState extends State<ChatPage> {
   final _scrollController = ScrollController();
   final _focusNode = FocusNode();
   final _openRouterService = OpenRouterService();
+  final _toolService = ToolService();
 
   // Сессии чатов
   List<ChatSession> _sessions = [];
@@ -63,14 +68,24 @@ class _ChatPageState extends State<ChatPage> {
   bool _streaming = false;
   String? _reasoningEffort;
   String? _reasoningSummary;
+  List<String> _enabledTools = [];
+  String? _workingDirectory;
+  bool _youtubeEnabled = false;
+  late YouTubeCookieService _ytCookieService;
   bool _settingsReady = false;
 
   List<AiModel> _models = [];
   bool _settingsOpen = false;
   bool _isLoading = false;
 
+  /// Progress tracking for tool calls: {callId: progress 0.0-1.0}
+  Map<String, double> _toolCallProgress = {};
+
   bool get _isWide => MediaQuery.sizeOf(context).width >= 960;
   bool get _showSettings => _isWide && _settingsOpen;
+
+  List<Map<String, dynamic>> get _availableTools =>
+      buildAvailableTools(youtubeEnabled: _youtubeEnabled);
 
   /// Текущая сессия
   ChatSession? get _activeSession {
@@ -91,6 +106,7 @@ class _ChatPageState extends State<ChatPage> {
   Future<void> _loadSettings() async {
     final prefs = await SharedPreferences.getInstance();
     _settings = SettingsService(prefs);
+    _ytCookieService = YouTubeCookieService(prefs);
 
     final cached = _settings.cachedModels;
     final sessions = _settings.chatSessions;
@@ -121,7 +137,17 @@ class _ChatPageState extends State<ChatPage> {
       _streaming = _settings.streaming;
       _reasoningEffort = _settings.reasoningEffort;
       _reasoningSummary = _settings.reasoningSummary;
+      _enabledTools = _settings.enabledTools;
+      _workingDirectory = _settings.workingDirectory;
+      _youtubeEnabled = _settings.youtubeEnabled;
       _models = cached.isNotEmpty ? cached : List.of(kDefaultModels);
+
+      _toolService.configure(
+        workingDirectory: _workingDirectory,
+        youtubeEnabled: _youtubeEnabled,
+        youtubeCookies: _ytCookieService.cookieHeader,
+        youtubeUserAgent: _ytCookieService.userAgent,
+      );
       _sessions = sessions;
 
       // Выбираем активную сессию: либо сохраненную, либо первую доступную
@@ -475,19 +501,25 @@ class _ChatPageState extends State<ChatPage> {
       if (_streaming) {
         await _sendStreaming();
       } else {
-        final reply = await _openRouterService.sendMessage(
+        final message = await _openRouterService.sendMessage(
           apiKey: _apiToken.trim(),
           modelId: _modelId,
           history: _activeSession!.messages,
           systemPrompt: _activeSession!.systemPrompt,
           reasoning: _reasoningConfig,
           includeReasoning: _shouldIncludeReasoning,
+          tools: _availableTools.isNotEmpty ? _availableTools : null,
         );
         if (!mounted) return;
         setState(() {
-          _activeSession!.messages.add(_parseReply(reply));
+          _activeSession!.messages.add(message);
           _isLoading = false;
         });
+
+        if (message.toolCalls != null) {
+          await _handleToolCalls(message.toolCalls!);
+        }
+
         _scrollToBottom();
         _saveSessions();
       }
@@ -495,6 +527,136 @@ class _ChatPageState extends State<ChatPage> {
       if (!mounted) return;
       setState(() => _isLoading = false);
       _showSnack('Ошибка: $e');
+    }
+  }
+
+  /// Max concurrent downloads
+  Future<void> _handleToolCalls(List<dynamic> toolCalls) async {
+    // Execute tool calls in parallel and show UI immediately
+    final futures = <Future<void>>[];
+    for (final call in toolCalls) {
+      futures.add(_executeToolCall(call));
+    }
+
+    await Future.wait(futures);
+
+    // After all tools are finished - send results back to model
+    if (mounted) {
+      await _sendManualAfterTool();
+    }
+  }
+
+  Future<void> _executeToolCall(dynamic call) async {
+    final name = call['function']['name'] as String? ?? 'unknown';
+    final argsJson = call['function']['arguments'] as String? ?? '{}';
+    final callId = call['id'] as String? ?? '';
+
+    Map<String, dynamic> args;
+    try {
+      args = jsonDecode(argsJson) as Map<String, dynamic>;
+    } catch (e) {
+      debugPrint('Failed to parse tool call arguments: $argsJson  error: $e');
+      setState(() {
+        _activeSession!.messages.add(Message(
+          '',
+          fromUser: false,
+          toolCallId: callId,
+          toolResult: jsonEncode({'error': 'Invalid tool call arguments received from AI.'}),
+          toolCallName: name,
+        ));
+      });
+      return;
+    }
+
+    // CREATE and ADD message immediately to show "Pending" state in UI
+    final initialMessage = Message(
+      '',
+      fromUser: false,
+      toolCallId: callId,
+      toolCallName: name,
+      toolCallArgs: argsJson,
+      toolCallStartTime: DateTime.now(),
+    );
+
+    setState(() {
+      _activeSession!.messages.add(initialMessage);
+      _toolCallProgress[callId] = 0.0;
+    });
+    _scrollToBottom();
+
+    // Now execute the actual logic
+    final result = await _toolService.execute(
+      name,
+      args,
+      callId: callId,
+      onProgress: (p, speed, eta) {
+        if (mounted) {
+          setState(() {
+            _toolCallProgress[callId] = p;
+          });
+        }
+      },
+    );
+
+    if (mounted) {
+      // Find the initial message and update it with the result
+      final index = _activeSession!.messages.indexOf(initialMessage);
+      if (index != -1) {
+        setState(() {
+          _toolCallProgress[callId] = 1.0;
+          
+          // Check for media display action
+          String? mediaPath;
+          String? mediaType;
+          if (result['action'] == 'display_media') {
+            mediaPath = result['media_path'];
+            mediaType = result['media_type'];
+          }
+
+          _activeSession!.messages[index] = initialMessage.copyWith(
+            toolResult: jsonEncode(result),
+            toolCallProgress: Map<String, double>.from(_toolCallProgress),
+            mediaPath: mediaPath,
+            mediaType: mediaType,
+          );
+        });
+      }
+    }
+  }
+
+  /// Повторная отправка после выполнения тулзов (не меняет текст пользователя)
+  Future<void> _sendManualAfterTool() async {
+    if (_activeSession == null) return;
+    setState(() => _isLoading = true);
+
+    try {
+      if (_streaming) {
+        await _sendStreaming();
+      } else {
+        final message = await _openRouterService.sendMessage(
+          apiKey: _apiToken.trim(),
+          modelId: _modelId,
+          history: _activeSession!.messages,
+          systemPrompt: _activeSession!.systemPrompt,
+          reasoning: _reasoningConfig,
+          includeReasoning: _shouldIncludeReasoning,
+          tools: _availableTools.isNotEmpty ? _availableTools : null,
+        );
+        if (!mounted) return;
+        setState(() {
+          _activeSession!.messages.add(message);
+          _isLoading = false;
+        });
+        if (message.toolCalls != null) {
+          await _handleToolCalls(message.toolCalls!);
+        }
+        _scrollToBottom();
+        _saveSessions();
+      }
+    } catch (e) {
+      if (!mounted) return;
+      setState(() => _isLoading = false);
+      _showSnack('Ошибка после Tools: $e');
     }
   }
 
@@ -514,19 +676,25 @@ class _ChatPageState extends State<ChatPage> {
       if (_streaming) {
         await _sendStreaming();
       } else {
-        final reply = await _openRouterService.sendMessage(
+        final message = await _openRouterService.sendMessage(
           apiKey: _apiToken.trim(),
           modelId: _modelId,
           history: _activeSession!.messages,
           systemPrompt: _activeSession!.systemPrompt,
           reasoning: _reasoningConfig,
           includeReasoning: _shouldIncludeReasoning,
+          tools: _availableTools.isNotEmpty ? _availableTools : null,
         );
         if (!mounted) return;
         setState(() {
-          _activeSession!.messages.add(_parseReply(reply));
+          _activeSession!.messages.add(message);
           _isLoading = false;
         });
+
+        if (message.toolCalls != null) {
+          await _handleToolCalls(message.toolCalls!);
+        }
+
         _scrollToBottom();
         _saveSessions();
       }
@@ -537,7 +705,7 @@ class _ChatPageState extends State<ChatPage> {
     }
   }
 
-  StreamSubscription<String>? _streamSubscription;
+  StreamSubscription<ChatChunk>? _streamSubscription;
 
   Future<void> _sendStreaming() async {
     _activeSession!.messages.add(
@@ -547,6 +715,9 @@ class _ChatPageState extends State<ChatPage> {
     _scrollToBottom();
 
     String fullReply = '';
+    String fullReasoning = '';
+    List<dynamic> collectedToolCalls = [];
+
     final completer = Completer<void>();
     final session = _activeSession!;
 
@@ -558,16 +729,51 @@ class _ChatPageState extends State<ChatPage> {
           systemPrompt: session.systemPrompt,
           reasoning: _reasoningConfig,
           includeReasoning: _shouldIncludeReasoning,
+          tools: _availableTools.isNotEmpty ? _availableTools : null,
         )
         .listen(
           (chunk) {
-            fullReply += chunk;
+            if (chunk.content != null) fullReply += chunk.content!;
+            if (chunk.reasoning != null) fullReasoning += chunk.reasoning!;
+            if (chunk.toolCalls != null) {
+              // OpenRouter streams tool calls incrementally:
+              // each chunk has {index, id, function: {name, arguments_partial}}.
+              // We must merge by index, concatenating arguments strings.
+              for (final tc in chunk.toolCalls!) {
+                final idx = tc['index'] as int?;
+                if (idx == null) continue;
+
+                // Ensure we have a slot for this index
+                while (collectedToolCalls.length <= idx) {
+                  collectedToolCalls.add(<String, dynamic>{});
+                }
+
+                final existing = collectedToolCalls[idx] as Map<String, dynamic>;
+                // Merge id
+                if (tc['id'] != null) existing['id'] = tc['id'];
+                // Merge function name
+                if (tc['function'] != null) {
+                  final fn = tc['function'] as Map<String, dynamic>;
+                  existing.putIfAbsent('function', () => <String, dynamic>{});
+                  final existingFn = existing['function'] as Map<String, dynamic>;
+                  if (fn['name'] != null) existingFn['name'] = fn['name'];
+                  // Concatenate arguments (they arrive in chunks)
+                  final argsChunk = fn['arguments'] as String? ?? '';
+                  existingFn['arguments'] =
+                      (existingFn['arguments'] as String? ?? '') + argsChunk;
+                }
+                collectedToolCalls[idx] = existing;
+              }
+            }
+
             if (!mounted) return;
             setState(() {
               session.messages[session.messages.length - 1] = Message(
                 fullReply,
                 fromUser: false,
                 timestamp: DateTime.now(),
+                thought: fullReasoning.isNotEmpty ? fullReasoning : null,
+                toolCalls: collectedToolCalls.isNotEmpty ? collectedToolCalls : null,
               );
             });
             _scrollToBottom();
@@ -579,8 +785,16 @@ class _ChatPageState extends State<ChatPage> {
             _saveSessions();
             if (!completer.isCompleted) completer.complete();
           },
-          onDone: () {
+          onDone: () async {
             if (!mounted) return;
+
+            final lastMsg = session.messages.last;
+            if (lastMsg.toolCalls != null) {
+              await _handleToolCalls(lastMsg.toolCalls!);
+              if (!completer.isCompleted) completer.complete();
+              return;
+            }
+
             setState(() {
               final lastIdx = session.messages.length - 1;
               session.messages[lastIdx] = _parseReply(fullReply);
@@ -675,6 +889,10 @@ class _ChatPageState extends State<ChatPage> {
             streaming: _streaming,
             reasoningEffort: _reasoningEffort,
             reasoningSummary: _reasoningSummary,
+            enabledTools: _enabledTools,
+            workingDirectory: _workingDirectory,
+            youtubeEnabled: _youtubeEnabled,
+            youtubeCookieService: _ytCookieService,
             onModelChanged: (v) => setState(() => _modelId = v),
             onModelsUpdated: (list) => setState(() => _models = list),
             onSettingsChanged: _reloadFromSettings,
@@ -715,8 +933,18 @@ class _ChatPageState extends State<ChatPage> {
       _streaming = _settings.streaming;
       _reasoningEffort = _settings.reasoningEffort;
       _reasoningSummary = _settings.reasoningSummary;
+      _enabledTools = _settings.enabledTools;
+      _workingDirectory = _settings.workingDirectory;
+      _youtubeEnabled = _settings.youtubeEnabled;
       final cached = _settings.cachedModels;
       if (cached.isNotEmpty) _models = cached;
+
+      _toolService.configure(
+        workingDirectory: _workingDirectory,
+        youtubeEnabled: _youtubeEnabled,
+        youtubeCookies: _ytCookieService.cookieHeader,
+        youtubeUserAgent: _ytCookieService.userAgent,
+      );
     });
   }
 
@@ -726,6 +954,7 @@ class _ChatPageState extends State<ChatPage> {
     _messageController.dispose();
     _scrollController.dispose();
     _focusNode.dispose();
+    _toolService.dispose();
     super.dispose();
   }
 
@@ -954,6 +1183,10 @@ class _ChatPageState extends State<ChatPage> {
         topP: _topP,
         maxTokens: _maxTokens,
         streaming: _streaming,
+        enabledTools: _enabledTools,
+        workingDirectory: _workingDirectory,
+        youtubeEnabled: _youtubeEnabled,
+        youtubeCookieService: _ytCookieService,
         reasoningEffort: _reasoningEffort,
         reasoningSummary: _reasoningSummary,
         onModelChanged: (v) => setState(() => _modelId = v),

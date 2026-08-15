@@ -5,8 +5,23 @@
 #include "flutter_window.h"
 #include "utils.h"
 
+namespace {
+void ConfigureSoftwareRendering() {
+  // WebView2 uses the GPU by default. Disable GPU acceleration before the
+  // Flutter engine and WebView2 are created to avoid black native surfaces.
+  _putenv_s("LIBGL_ALWAYS_SOFTWARE", "1");
+  _putenv_s("GSK_RENDERER", "cairo");
+  _putenv_s("WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS",
+            "--disable-gpu --disable-gpu-compositing "
+            "--disable-gpu-rasterization --disable-zero-copy "
+            "--in-process-gpu");
+}
+}  // namespace
+
 int APIENTRY wWinMain(_In_ HINSTANCE instance, _In_opt_ HINSTANCE prev,
                       _In_ wchar_t *command_line, _In_ int show_command) {
+  ConfigureSoftwareRendering();
+
   // Attach to console when present (e.g., 'flutter run') or create a
   // new console when running with a debugger.
   if (!::AttachConsole(ATTACH_PARENT_PROCESS) && ::IsDebuggerPresent()) {

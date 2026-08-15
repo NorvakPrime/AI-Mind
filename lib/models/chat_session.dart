@@ -40,7 +40,7 @@ class ChatSession {
     if (title.isNotEmpty && title != 'Новый чат') return title;
     final userMsg = messages.firstWhere(
       (m) => m.fromUser && m.text.isNotEmpty,
-      orElse: () => const Message('', fromUser: true),
+      orElse: () => Message('', fromUser: true),
     );
     if (userMsg.text.isNotEmpty) {
       return userMsg.text.length > 40

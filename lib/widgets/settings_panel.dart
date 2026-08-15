@@ -1,11 +1,17 @@
+import 'dart:io';
+import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
 import '../l10n/translations.dart';
 import '../models/ai_model.dart';
+import '../pages/youtube_login_page.dart';
 import '../services/locale_service.dart';
 import '../services/open_router_service.dart';
 import '../services/settings_service.dart';
+import '../services/youtube_cookie_service.dart';
+import '../services/youtube_login_helper.dart';
+import '../services/yt_dlp_service.dart';
 import '../theme/app_colors.dart';
 import 'section_header.dart';
 import 'slider_param.dart';
@@ -24,6 +30,10 @@ class SettingsPanel extends StatefulWidget {
     required this.streaming,
     this.reasoningEffort,
     this.reasoningSummary,
+    required this.enabledTools,
+    this.workingDirectory,
+    required this.youtubeEnabled,
+    this.youtubeCookieService,
     required this.onModelChanged,
     required this.onModelsUpdated,
     required this.onSettingsChanged,
@@ -40,6 +50,10 @@ class SettingsPanel extends StatefulWidget {
   final bool streaming;
   final String? reasoningEffort;
   final String? reasoningSummary;
+  final List<String> enabledTools;
+  final String? workingDirectory;
+  final bool youtubeEnabled;
+  final YouTubeCookieService? youtubeCookieService;
   final ValueChanged<String> onModelChanged;
   final ValueChanged<List<AiModel>> onModelsUpdated;
   final VoidCallback onSettingsChanged;
@@ -63,6 +77,14 @@ class _SettingsPanelState extends State<SettingsPanel> {
   late String _modelId;
   String? _reasoningEffort;
   String? _reasoningSummary;
+  late List<String> _enabledTools;
+  String? _workingDirectory;
+  late bool _youtubeEnabled;
+  late bool _ytHasCookies;
+  bool _ytDlpInstalled = false;
+  bool _ytDlpDownloading = false;
+  double _ytDlpProgress = 0.0;
+  final _ytDlpService = YtDlpService();
   String _filterType = 'all'; // all, free, paid, reasoning, no_reasoning
 
   // Загрузка моделей
@@ -86,11 +108,49 @@ class _SettingsPanelState extends State<SettingsPanel> {
     _modelId = widget.modelId;
     _reasoningEffort = widget.reasoningEffort;
     _reasoningSummary = widget.reasoningSummary;
+    _enabledTools = List.from(widget.enabledTools);
+    _workingDirectory = widget.workingDirectory;
+    _youtubeEnabled = widget.youtubeEnabled;
+    _ytHasCookies = widget.youtubeCookieService?.hasCookies ?? false;
+    _checkYtDlp();
 
     // Авто-загрузка баланса и моделей при старте, если токен уже есть
     final token = widget.apiToken.trim();
     if (token.length > 20 && token.startsWith('sk-')) {
       _fetchAll(token);
+    }
+  }
+
+  void _checkYtDlp() async {
+    if (Platform.isAndroid || Platform.isIOS) return;
+    final installed = await _ytDlpService.isInstalled();
+    if (mounted) setState(() => _ytDlpInstalled = installed);
+  }
+
+  Future<void> _downloadYtDlp() async {
+    if (_ytDlpDownloading) return;
+    setState(() {
+      _ytDlpDownloading = true;
+      _ytDlpProgress = 0.0;
+    });
+
+    try {
+      await _ytDlpService.downloadExecutable(onProgress: (p) {
+        if (mounted) setState(() => _ytDlpProgress = p);
+      });
+      if (mounted) {
+        setState(() {
+          _ytDlpInstalled = true;
+          _ytDlpDownloading = false;
+        });
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() => _ytDlpDownloading = false);
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Failed to download yt-dlp: $e')),
+        );
+      }
     }
   }
 
@@ -124,6 +184,18 @@ class _SettingsPanelState extends State<SettingsPanel> {
     }
     if (old.reasoningSummary != widget.reasoningSummary) {
       _reasoningSummary = widget.reasoningSummary;
+    }
+    if (old.enabledTools != widget.enabledTools) {
+      _enabledTools = List.from(widget.enabledTools);
+    }
+    if (old.workingDirectory != widget.workingDirectory) {
+      _workingDirectory = widget.workingDirectory;
+    }
+    if (old.youtubeEnabled != widget.youtubeEnabled) {
+      _youtubeEnabled = widget.youtubeEnabled;
+    }
+    if (old.youtubeCookieService != widget.youtubeCookieService) {
+      _ytHasCookies = widget.youtubeCookieService?.hasCookies ?? false;
     }
   }
 
@@ -220,6 +292,10 @@ class _SettingsPanelState extends State<SettingsPanel> {
       _balanceError = null;
       _models = List.from(kDefaultModels);
       _modelId = kDefaultModels.first.id;
+      _enabledTools = [];
+      _workingDirectory = null;
+      _youtubeEnabled = false;
+      _ytHasCookies = false;
     });
     widget.onModelChanged(kDefaultModels.first.id);
     widget.onModelsUpdated(List.of(kDefaultModels));
@@ -291,7 +367,8 @@ class _SettingsPanelState extends State<SettingsPanel> {
               },
               dropdownColor: AppColors.surfaceLight,
               isExpanded: true,
-              icon: const Icon(Icons.keyboard_arrow_down_rounded, color: AppColors.textMuted),
+              icon: const Icon(Icons.keyboard_arrow_down_rounded,
+                  color: AppColors.textMuted),
               style: const TextStyle(color: AppColors.textPrimary, fontSize: 14),
             ),
           ),
@@ -340,7 +417,8 @@ class _SettingsPanelState extends State<SettingsPanel> {
           ],
 
           // --- Язык приложения ---
-          SectionHeader(title: l10n.get('app_language'), icon: Icons.language_rounded),
+          SectionHeader(
+              title: l10n.get('app_language'), icon: Icons.language_rounded),
           const SizedBox(height: 8),
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
@@ -354,25 +432,30 @@ class _SettingsPanelState extends State<SettingsPanel> {
                 value: localeProvider.locale.languageCode,
                 dropdownColor: AppColors.surfaceLight,
                 isExpanded: true,
-                icon: const Icon(Icons.keyboard_arrow_down_rounded, color: AppColors.textMuted),
-                items: [
+                icon: const Icon(Icons.keyboard_arrow_down_rounded,
+                    color: AppColors.textMuted),
+                items: const [
                   DropdownMenuItem(
                     value: 'en',
                     child: Row(
-                      children: const [
+                      children: [
                         Text('🇺🇸', style: TextStyle(fontSize: 18)),
                         SizedBox(width: 12),
-                        Text('English', style: TextStyle(color: AppColors.textPrimary, fontSize: 14)),
+                        Text('English',
+                            style: TextStyle(
+                                color: AppColors.textPrimary, fontSize: 14)),
                       ],
                     ),
                   ),
                   DropdownMenuItem(
                     value: 'ru',
                     child: Row(
-                      children: const [
+                      children: [
                         Text('🇷🇺', style: TextStyle(fontSize: 18)),
                         SizedBox(width: 12),
-                        Text('Русский', style: TextStyle(color: AppColors.textPrimary, fontSize: 14)),
+                        Text('Русский',
+                            style: TextStyle(
+                                color: AppColors.textPrimary, fontSize: 14)),
                       ],
                     ),
                   ),
@@ -487,7 +570,11 @@ class _SettingsPanelState extends State<SettingsPanel> {
                           if (token.isEmpty) {
                             ScaffoldMessenger.of(context).showSnackBar(
                               SnackBar(
-                                content: Text(l10n.get('api_token_error') == 'api_token_error' ? 'Сначала введите API токен' : l10n.get('api_token_error')),
+                                content: Text(
+                                    l10n.get('api_token_error') ==
+                                            'api_token_error'
+                                        ? 'Сначала введите API токен'
+                                        : l10n.get('api_token_error')),
                               ),
                             );
                             return;
@@ -544,7 +631,8 @@ class _SettingsPanelState extends State<SettingsPanel> {
               _buildFilterChip(l10n.get('free_models'), 'free', l10n),
               _buildFilterChip(l10n.get('paid_models'), 'paid', l10n),
               _buildFilterChip(l10n.get('reasoning_models'), 'reasoning', l10n),
-              _buildFilterChip(l10n.get('no_reasoning_models'), 'no_reasoning', l10n),
+              _buildFilterChip(
+                  l10n.get('no_reasoning_models'), 'no_reasoning', l10n),
             ],
           ),
           const SizedBox(height: 12),
@@ -556,9 +644,7 @@ class _SettingsPanelState extends State<SettingsPanel> {
               border: Border.all(color: AppColors.surfaceBorder, width: 0.5),
             ),
             child: DropdownButtonFormField<String>(
-              initialValue: _models.any((m) => m.id == _modelId)
-                  ? _modelId
-                  : null,
+              initialValue: _models.any((m) => m.id == _modelId) ? _modelId : null,
               dropdownColor: AppColors.surfaceLight,
               isExpanded: true,
               style: const TextStyle(
@@ -579,7 +665,8 @@ class _SettingsPanelState extends State<SettingsPanel> {
                   vertical: 4,
                 ),
                 hintText: l10n.get('select_model'),
-                hintStyle: const TextStyle(color: AppColors.textMuted, fontSize: 14),
+                hintStyle:
+                    const TextStyle(color: AppColors.textMuted, fontSize: 14),
               ),
               items: _models.where((m) {
                 // Текущая выбранная модель ВСЕГДА должна быть в списке
@@ -754,11 +841,13 @@ class _SettingsPanelState extends State<SettingsPanel> {
                 contentPadding: const EdgeInsets.symmetric(horizontal: 16),
                 title: Text(
                   l10n.streaming,
-                  style: const TextStyle(color: AppColors.textPrimary, fontSize: 14),
+                  style:
+                      const TextStyle(color: AppColors.textPrimary, fontSize: 14),
                 ),
                 subtitle: Text(
                   l10n.streamingDesc,
-                  style: const TextStyle(color: AppColors.textMuted, fontSize: 12),
+                  style:
+                      const TextStyle(color: AppColors.textMuted, fontSize: 12),
                 ),
                 activeThumbColor: AppColors.accent,
                 value: _streaming,
@@ -784,14 +873,16 @@ class _SettingsPanelState extends State<SettingsPanel> {
               return Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  SectionHeader(title: l10n.reasoning, icon: Icons.psychology_rounded),
+                  SectionHeader(
+                      title: l10n.reasoning, icon: Icons.psychology_rounded),
                   const SizedBox(height: 8),
                   Container(
                     padding: const EdgeInsets.all(16),
                     decoration: BoxDecoration(
                       color: AppColors.surface,
                       borderRadius: BorderRadius.circular(14),
-                      border: Border.all(color: AppColors.surfaceBorder, width: 0.5),
+                      border:
+                          Border.all(color: AppColors.surfaceBorder, width: 0.5),
                     ),
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
@@ -800,15 +891,19 @@ class _SettingsPanelState extends State<SettingsPanel> {
                           if (model!.reasoning!.supportedEfforts.isNotEmpty)
                             _buildReasoningDropdown<String?>(
                               label: l10n.reasoningEffort,
-                              value: model.reasoning!.supportedEfforts.contains(_reasoningEffort)
+                              value: model.reasoning!.supportedEfforts
+                                      .contains(_reasoningEffort)
                                   ? _reasoningEffort
-                                  : (model.reasoning!.supportedEfforts.contains(model.reasoning!.defaultEffort)
+                                  : (model.reasoning!.supportedEfforts.contains(
+                                          model.reasoning!.defaultEffort)
                                       ? model.reasoning!.defaultEffort
                                       : null),
                               items: [
-                                DropdownMenuItem(value: null, child: Text(l10n.get('auto'))),
+                                DropdownMenuItem(
+                                    value: null, child: Text(l10n.get('auto'))),
                                 ...model.reasoning!.supportedEfforts.map(
-                                  (e) => DropdownMenuItem(value: e, child: Text(l10n.get(e))),
+                                  (e) => DropdownMenuItem(
+                                      value: e, child: Text(l10n.get(e))),
                                 ),
                               ],
                               onChanged: (v) {
@@ -823,10 +918,16 @@ class _SettingsPanelState extends State<SettingsPanel> {
                             label: l10n.reasoningSummary,
                             value: _reasoningSummary,
                             items: [
-                              DropdownMenuItem(value: null, child: Text(l10n.get('none'))),
-                              DropdownMenuItem(value: 'auto', child: Text(l10n.get('auto'))),
-                              DropdownMenuItem(value: 'concise', child: Text(l10n.get('concise'))),
-                              DropdownMenuItem(value: 'detailed', child: Text(l10n.get('detailed'))),
+                              DropdownMenuItem(
+                                  value: null, child: Text(l10n.get('none'))),
+                              DropdownMenuItem(
+                                  value: 'auto', child: Text(l10n.get('auto'))),
+                              DropdownMenuItem(
+                                  value: 'concise',
+                                  child: Text(l10n.get('concise'))),
+                              DropdownMenuItem(
+                                  value: 'detailed',
+                                  child: Text(l10n.get('detailed'))),
                             ],
                             onChanged: (v) {
                               setState(() => _reasoningSummary = v);
@@ -838,7 +939,8 @@ class _SettingsPanelState extends State<SettingsPanel> {
                           Row(
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
-                              const Icon(Icons.info_outline_rounded, size: 14, color: AppColors.textMuted),
+                              const Icon(Icons.info_outline_rounded,
+                                  size: 14, color: AppColors.textMuted),
                               const SizedBox(width: 8),
                               Expanded(
                                 child: Text(
@@ -860,6 +962,277 @@ class _SettingsPanelState extends State<SettingsPanel> {
               );
             },
           ),
+          const SizedBox(height: 24),
+
+          // ── Инструменты (Tools) ──
+          SectionHeader(title: l10n.get('tools'), icon: Icons.handyman_rounded),
+          const SizedBox(height: 8),
+          Container(
+            padding: const EdgeInsets.all(16),
+            decoration: BoxDecoration(
+              color: AppColors.surface,
+              borderRadius: BorderRadius.circular(14),
+              border: Border.all(color: AppColors.surfaceBorder, width: 0.5),
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  l10n.get('tools_desc'),
+                  style: const TextStyle(color: AppColors.textMuted, fontSize: 12),
+                ),
+                const SizedBox(height: 12),
+
+                // YouTube toggle
+                Container(
+                  decoration: BoxDecoration(
+                    color: AppColors.surfaceLight,
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: Material(
+                    color: Colors.transparent,
+                    borderRadius: BorderRadius.circular(12),
+                    child: SwitchListTile(
+                      contentPadding: const EdgeInsets.symmetric(horizontal: 16),
+                      title: Row(
+                        children: [
+                          const Icon(Icons.play_circle_outline_rounded, size: 18, color: Colors.red),
+                          const SizedBox(width: 8),
+                          Text(
+                            l10n.get('youtube_enabled'),
+                            style: const TextStyle(color: AppColors.textPrimary, fontSize: 14),
+                          ),
+                        ],
+                      ),
+                      subtitle: Text(
+                        l10n.get('youtube_desc'),
+                        style: const TextStyle(color: AppColors.textMuted, fontSize: 12),
+                      ),
+                      activeThumbColor: AppColors.accent,
+                      value: _youtubeEnabled,
+                      onChanged: (v) async {
+                        setState(() => _youtubeEnabled = v);
+                        await widget.settings.setYoutubeEnabled(v);
+                        widget.onSettingsChanged();
+                      },
+                    ),
+                  ),
+                ),
+                // YouTube login button (only on supported platforms)
+                if (_youtubeEnabled && isYouTubeLoginSupported) ...[
+                  const SizedBox(height: 8),
+                  Container(
+                    decoration: BoxDecoration(
+                      color: AppColors.surfaceLight,
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    child: Material(
+                      color: Colors.transparent,
+                      borderRadius: BorderRadius.circular(12),
+                      child: Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                        child: Row(
+                          children: [
+                            Icon(
+                              _ytHasCookies ? Icons.verified_user_outlined : Icons.login_rounded,
+                              size: 18,
+                              color: _ytHasCookies ? Colors.green : AppColors.accent,
+                            ),
+                            const SizedBox(width: 8),
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(
+                                    _ytHasCookies ? l10n.get('yt_logged_in') : l10n.get('yt_login'),
+                                    style: TextStyle(
+                                      color: _ytHasCookies ? Colors.green : AppColors.textPrimary,
+                                      fontSize: 14,
+                                    ),
+                                  ),
+                                  Text(
+                                    _ytHasCookies ? l10n.get('yt_login_desc_ok') : l10n.get('yt_login_desc'),
+                                    style: const TextStyle(color: AppColors.textMuted, fontSize: 11),
+                                  ),
+                                ],
+                              ),
+                            ),
+                            const SizedBox(width: 8),
+                            TextButton(
+                              onPressed: () async {
+                                if (_ytHasCookies) {
+                                  // Logout
+                                  await widget.youtubeCookieService?.clearCookies();
+                                  setState(() => _ytHasCookies = false);
+                                  widget.onSettingsChanged();
+                                  if (mounted) {
+                                    ScaffoldMessenger.of(context).showSnackBar(
+                                      SnackBar(content: Text(l10n.get('yt_logged_out'))),
+                                    );
+                                  }
+                                } else {
+                                  // Login inside the app. The page provides its own
+                                  // AppBar/back button, so the user can return here
+                                  // without leaving a separate browser window.
+                                  final result = await Navigator.push<YouTubeLoginResult>(
+                                    context,
+                                    MaterialPageRoute(
+                                      builder: (_) => const YouTubeLoginPage(),
+                                    ),
+                                  );
+                                  if (result != null && result.cookies.isNotEmpty) {
+                                    await widget.youtubeCookieService?.saveCookies(
+                                      result.cookies,
+                                      userAgent: result.userAgent,
+                                    );
+                                    setState(() => _ytHasCookies = true);
+                                    widget.onSettingsChanged();
+                                    if (mounted) {
+                                      ScaffoldMessenger.of(context).showSnackBar(
+                                        SnackBar(content: Text(l10n.get('yt_login_success'))),
+                                      );
+                                    }
+                                  }
+                                }
+                              },
+                              style: TextButton.styleFrom(
+                                backgroundColor: _ytHasCookies ? Colors.red.withAlpha(30) : AppColors.accent.withAlpha(30),
+                                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                              ),
+                              child: Text(
+                                _ytHasCookies ? l10n.get('yt_logout') : l10n.get('yt_login_btn'),
+                                style: TextStyle(
+                                  color: _ytHasCookies ? Colors.red : AppColors.accent,
+                                  fontSize: 12,
+                                  fontWeight: FontWeight.w600,
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ),
+                  
+                  // yt-dlp Engine Section (Desktop only)
+                  if (!Platform.isAndroid && !Platform.isIOS) ...[
+                    const SizedBox(height: 8),
+                    Container(
+                      decoration: BoxDecoration(
+                        color: AppColors.surfaceLight.withAlpha(50),
+                        borderRadius: BorderRadius.circular(12),
+                        border: Border.all(color: AppColors.surfaceBorder),
+                      ),
+                      child: Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                        child: Row(
+                          children: [
+                            Icon(
+                              Icons.settings_suggest_rounded,
+                              size: 20,
+                              color: _ytDlpInstalled ? Colors.green : Colors.orange,
+                            ),
+                            const SizedBox(width: 8),
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(
+                                    l10n.get('yt_dlp_status'),
+                                    style: const TextStyle(color: AppColors.textPrimary, fontSize: 13, fontWeight: FontWeight.w600),
+                                  ),
+                                  if (_ytDlpDownloading)
+                                    Padding(
+                                      padding: const EdgeInsets.only(top: 4),
+                                      child: LinearProgressIndicator(
+                                        value: _ytDlpProgress,
+                                        backgroundColor: AppColors.surface,
+                                        color: AppColors.accent,
+                                        minHeight: 2,
+                                      ),
+                                    )
+                                  else
+                                    Text(
+                                      _ytDlpInstalled ? l10n.get('yt_dlp_installed') : l10n.get('yt_dlp_not_installed'),
+                                      style: TextStyle(
+                                        color: _ytDlpInstalled ? Colors.green.withAlpha(180) : Colors.orange.withAlpha(180),
+                                        fontSize: 11,
+                                      ),
+                                    ),
+                                ],
+                              ),
+                            ),
+                            const SizedBox(width: 8),
+                            TextButton(
+                              onPressed: _ytDlpDownloading ? null : _downloadYtDlp,
+                              style: TextButton.styleFrom(
+                                backgroundColor: AppColors.accent.withAlpha(30),
+                                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 0),
+                              ),
+                              child: Text(
+                                _ytDlpDownloading ? l10n.get('yt_dlp_downloading') : (_ytDlpInstalled ? l10n.get('update') : l10n.get('yt_dlp_download')),
+                                style: const TextStyle(color: AppColors.accent, fontSize: 11, fontWeight: FontWeight.w600),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ],
+                ],
+                
+                const Divider(color: AppColors.surfaceBorder, height: 24),
+                
+                // Working Directory
+                Text(
+                  l10n.get('working_dir'),
+                  style: const TextStyle(color: AppColors.textSecondary, fontSize: 12, fontWeight: FontWeight.w600),
+                ),
+                const SizedBox(height: 8),
+                InkWell(
+                  onTap: () async {
+                    try {
+                      String? selectedDirectory = await FilePicker.getDirectoryPath();
+                      if (selectedDirectory != null) {
+                        setState(() => _workingDirectory = selectedDirectory);
+                        await widget.settings.setWorkingDirectory(selectedDirectory);
+                        widget.onSettingsChanged();
+                      }
+                    } catch (e) {
+                      debugPrint('FilePicker error: $e');
+                    }
+                  },
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                    decoration: BoxDecoration(
+                      color: AppColors.surfaceLight,
+                      borderRadius: BorderRadius.circular(10),
+                      border: Border.all(color: AppColors.surfaceBorder),
+                    ),
+                    child: Row(
+                      children: [
+                        const Icon(Icons.folder_open_rounded, size: 18, color: AppColors.accentLight),
+                        const SizedBox(width: 10),
+                        Expanded(
+                          child: Text(
+                            _workingDirectory ?? l10n.get('select_dir'),
+                            style: TextStyle(
+                              color: _workingDirectory != null ? AppColors.textPrimary : AppColors.textMuted,
+                              fontSize: 13,
+                            ),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+
           const SizedBox(height: 24),
 
           // ── Сброс ──
