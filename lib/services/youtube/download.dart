@@ -126,8 +126,10 @@ Future<Map<String, dynamic>> downloadYoutubeVideo(
 
       final downloadFuture = android_extractor.YoutubeDLFlutter.instance.download(request).then((result) async {
         progressSub.cancel();
-        if (cookieFile != null && await cookieFile.exists()) {
-          await cookieFile.delete();
+        final file = cookieFile;
+
+        if (file != null && await file.exists()) {
+          await file.delete();
         }
 
         if (result.status == android_extractor.OperationStatus.success) {
