@@ -56,16 +56,19 @@ dependencies:
   url_launcher: ^6.3.2
   path: ^1.9.0
   path_provider: ^2.1.6
-  file_picker: ^11.0.3
+  file_picker: 11.0.3
   flutter_inappwebview: ^6.2.0-beta.3
   ffi: ^2.1.2
   media_kit: ^1.1.10+1
-  media_kit_video: ^1.2.4
+  media_kit_video: ^2.0.1
   media_kit_libs_video: ^1.0.4
-  extractor: ^1.0.0
+
   dio: ^5.11.0
   sqflite: ^2.4.3
   sqflite_common_ffi: ^2.4.2
+
+  extractor:
+    path: packages/extractor
 
 dev_dependencies:
   flutter_test:
